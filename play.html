@@ -514,8 +514,11 @@ const START_LEN=8;          // 玩家起步更长
 const DEAD_ZONE=2.0;
 const CAM_LERP=0.16;
 /* —— 爽点参数：不死亡，只掉肉（保持原样）—— */
-const DROP_MEAT=3;          // 撞到别人掉几节肉（不致命）
+const DROP_MEAT=3;          // 撞到别人掉几节肉（不致命，open 模式现已改为掉一半，见 collideDrop）
 const HIT_CD=600;           // 掉肉冷却，避免连掉
+/* 换乘保底节流：每拍都补换乘豆会让玩家附近永远有换乘站、频繁弹面板打断游戏。
+   加冷却后，场上没有换乘豆时也最多每 TRANSFER_ENSURE_CD 拍才补一个（≈9s@150ms）。 */
+const TRANSFER_ENSURE_CD=60;
 /* —— AI 变笨：半速 + 迟钝 + 近视 + 失误 —— */
 const BOT_SKIP=1;           // 1=与玩家同速（改 2 则对手半速）
 const BOOST_DROP=6;         // 长按加速：每走 6 步掉 1 节肉（肉落地成豆子，会被抢）
@@ -850,7 +853,7 @@ function stationIndex(){
      全网每站每次出现概率只剩约 0.08%，凑满 3 次要吃几千颗豆 —— 于是「站点卡片」
      和「换乘」玩着玩着就消失了。这是数学问题，不是代码 bug。
    加权后每一类核心玩法都有稳定供给：建设本线 / 凑齐出卡 / 换乘 都不会断供。 */
-var STATION_W={ next:26, nearCard:22, homeLine:18, transfer:14, unlit:8, other:6 };
+var STATION_W={ next:26, nearCard:22, homeLine:18, transfer:6, unlit:8, other:6 };
 var pickLastKind="";
 function pickStation(){
   if(!STATION_POOL.length) return {name:"站",line:"",color:"#888"};
@@ -1711,13 +1714,17 @@ function ensureNextStation(){
   pushFood(c.x,c.y,1,want);   // forceName=站名：不能被挪走，必须落在玩家附近
 }
 /* 换乘保底：场上一个换乘站都没有时，主动在玩家附近补一个。
-   没有这一条，玩家可能连着几十拍都碰不到换乘站，换乘玩法整段「消失」。 */
+   没有这一条，玩家可能连着几十拍都碰不到换乘站，换乘玩法整段「消失」。
+   但用 TRANSFER_ENSURE_CD 节流，避免「每拍都补」导致附近永远有换乘豆、频繁弹面板打断。 */
+var lastTransferEnsure=-999;
 function ensureTransfer(){
   if(!player||!player.alive||!player.body||!player.body[0]) return;
   stationIndex();
   if(!TRANSFER_NAMES.length) return;
   var i;
   for(i=0;i<food.length;i++) if(food[i].transfer) return;   // 场上已有，不补
+  if(tickCount - lastTransferEnsure < TRANSFER_ENSURE_CD) return;   // 节流
+  lastTransferEnsure=tickCount;
   var h=player.body[0], occ=occSet(), c=null, g, rad, t;
   recountZones();
   for(g=0;g<60 && !c;g++){
@@ -2747,6 +2754,16 @@ function dropMeat(sn,n){
   sn.score=sn.body.length;
   if(sn.isPlayer){ scoreEl.textContent=sn.score; hitFlash=1; }
 }
+/* 撞身惩罚：掉「一半」长度（参考贪吃蛇大作战的「掉肉存活」）。
+   既能惩罚、又把过长蛇身压下来（用户：蛇身太长了）；掉落的肉就地成豆子。
+   起步太短（≤START_LEN）时不掉，避免蛇凭空消失。 */
+function collideDrop(sn,hit){
+  var lost=Math.floor(sn.body.length/2);
+  if(lost<=0) return 0;
+  dropMeat(sn,lost);
+  if(sn.isPlayer) feed("撞上 "+(hit?hit.name:"对手")+"，掉了 "+lost+" 节（一半）","bad");
+  return lost;
+}
 function killSnake(sn,killer){
   recountZones();
   for(var i=0;i<sn.body.length;i++) pushFood(sn.body[i].x,sn.body[i].y,3);
@@ -2799,9 +2816,10 @@ function moveSnake(sn,now){
   if(hit){
     if(sn.isPlayer && autoMode) return;      // 托管无敌：只被挡住，不掉肉、不死
     if(sn.squeezeUntil && tickCount<sn.squeezeUntil) return;   // 被围豁免：只挡，不掉肉也不死
-    if(mode==="battle"){ killSnake(sn,hit); return; }
-    if(now-sn.hitCd>HIT_CD){ dropMeat(sn,DROP_MEAT); sn.hitCd=now;
-      if(sn.isPlayer) feed("撞上 "+(hit?hit.name:"对手")+"，掉了 "+DROP_MEAT+" 节","bad"); }
+    if(mode==="battle"){ killSnake(sn,hit); return; }   // 大作战：撞身即死（slither.io 原味）
+    // 开放世界：撞身「掉一半肉」而非只掉几节 —— 参考贪吃蛇大作战的「掉肉存活」，
+    // 既能惩罚、又把过长蛇身压下来，掉落的肉就地成豆子。
+    if(now-sn.hitCd>HIT_CD){ collideDrop(sn,hit); sn.hitCd=now; }
     return;
   }
   sn.body.unshift(nh);
@@ -3930,6 +3948,8 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
     }
     return h+" | "+cd.tip;
   },
+  /* 测试用：暴露碰撞掉一半的逻辑（不改动 moveSnake 内部） */
+  collideDrop:function(sn,hit){ return collideDrop(sn,hit); },
   areaCount:function(){ var k=0, x; for(x in AREA) k++; return k; },
   /* 站点生成分布自检：验证「卡片 / 换乘」后期不会断供 */
   pickSample:function(n){ var c={}, i; player=player||null;

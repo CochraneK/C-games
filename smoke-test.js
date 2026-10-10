@@ -280,6 +280,27 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
     } else {
       console.log("  [" + theme + "] 卡片坐标: 实际经纬度 ✓ · 线图序列 ✓（" + probeStation + " → " + T.lines[0].name + " " + (T.lines[0].stations.indexOf(probeStation) + 1) + "/" + T.lines[0].stations.length + " 等）");
     }
+    // 碰撞掉一半（参考贪吃蛇大作战「掉肉存活」）：open 模式撞身应掉一半长度，掉肉成豆子
+    if (typeof S.collideDrop === "function") {
+      const fake = { body: [], score: 0, isPlayer: false, name: "t" };
+      for (let q = 0; q < 20; q++) fake.body.push({ x: q, y: 0 });
+      const lost = S.collideDrop(fake, { name: "对手" });
+      if (!(lost === 10 && fake.body.length === 10)) {
+        console.error("FAIL [" + theme + "] 碰撞未掉一半：before=20 lost=" + lost + " after=" + fake.body.length);
+        ok = false;
+      } else {
+        console.log("  [" + theme + "] 碰撞掉一半肉 ✓（20→10，掉落的肉成豆子）");
+      }
+    }
+    // 换乘站比例下降：pickSample 按权重抽样，transfer 占比应明显低于改之前的 ~15%
+    const ps = S.pickSample(600);
+    const trRatio = (ps.transfer || 0) / 600;
+    if (!(trRatio < 0.12)) {
+      console.error("FAIL [" + theme + "] 换乘站比例过高 " + (trRatio * 100).toFixed(1) + "%（应 <12%）: " + JSON.stringify(ps));
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 换乘站比例 " + (trRatio * 100).toFixed(1) + "% ✓（<12%，面板中断更少）");
+    }
     // 弹卡必须暂停游戏，且关闭后恢复原状态（不然玩家在读卡时会被撞）
     // 用一个全新的站：cardsGot 已解锁的站不会二次弹卡，拿旧站测会误判
     S.closeCard();                              // 先清掉可能残留的卡片状态
