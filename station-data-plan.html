@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>地铁站卡片内容 · 数据源调研与玩法定案</title>
+<style>
+  :root{
+    --bg:#fbf7ee; --paper:#fffdf8; --ink:#2c2822; --ink-soft:#6b6255;
+    --line:#e3dbc9; --teal:#2f9b95; --teal-d:#1f6f6b;
+    --amber:#c9772e; --amber-bg:#fdf2e4; --red:#b4453a; --red-bg:#fbeceb;
+    --green:#3f7d4e; --green-bg:#eaf3ec; --blue:#3a6ea5; --blue-bg:#eaf0f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+    line-height:1.75;font-size:15px;}
+  .wrap{max-width:940px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:1px}
+  .sub{color:var(--ink-soft);font-size:13px;margin-bottom:28px}
+  h2{font-size:19px;margin:38px 0 14px;padding-left:12px;border-left:4px solid var(--teal);letter-spacing:.5px}
+  h3{font-size:15px;margin:22px 0 8px;color:var(--teal-d)}
+  p{margin:10px 0}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .verdict{background:var(--amber-bg);border:1px solid #e8c9a0;border-radius:12px;padding:18px 20px;margin:20px 0}
+  .verdict b{color:var(--amber)}
+  .warn{background:var(--red-bg);border:1px solid #e8b3ae;border-radius:12px;padding:16px 18px;margin:14px 0}
+  .warn b{color:var(--red)}
+  .good{background:var(--green-bg);border:1px solid #b3d4bb;border-radius:12px;padding:16px 18px;margin:14px 0}
+  .good b{color:var(--green)}
+  .note{background:var(--blue-bg);border:1px solid #b9cbe4;border-radius:12px;padding:16px 18px;margin:14px 0}
+  .note b{color:var(--blue)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:#f3ecdd;font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:5px;vertical-align:middle}
+  .t-ok{background:var(--green-bg);color:var(--green);border:1px solid #b3d4bb}
+  .t-no{background:var(--red-bg);color:var(--red);border:1px solid #e8b3ae}
+  .t-mid{background:var(--amber-bg);color:var(--amber);border:1px solid #e8c9a0}
+  code{background:#f2ece0;padding:1px 5px;border-radius:4px;font-size:12.5px;
+    font-family:"SFMono-Regular",Consolas,monospace}
+  pre{background:#f6f1e6;border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+    overflow-x:auto;font-size:12.5px;line-height:1.6;margin:10px 0}
+  .cols{display:flex;gap:14px;flex-wrap:wrap}
+  .col{flex:1 1 260px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .col h4{margin:0 0 8px;font-size:15px}
+  .opt{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+  .opt h4{margin:0 0 6px;font-size:15px;color:var(--ink)}
+  .opt .meta{font-size:12px;color:var(--ink-soft);margin-bottom:8px}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:5px 0}
+  .flow{font-size:13px;background:#f6f1e6;border:1px dashed var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+  .flow div{margin:4px 0}
+  .arrow{color:var(--teal);font-weight:700}
+  .small{font-size:12.5px;color:var(--ink-soft)}
+  .rec{float:right;font-size:11px;background:var(--teal);color:#fff;padding:2px 9px;border-radius:10px;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>地铁站卡片内容：数据源调研 + 玩法定案</h1>
+<div class="sub">2026-10-10 · 针对「676 站（北京 410 / 南京 266）附近有什么值得逛」这件事，实测了 5 类数据源，下面是结论与建议</div>
+
+<div class="verdict">
+<b>结论先行</b>
+<ol style="margin:8px 0 0">
+<li><b>不存在「别人整理好的每站打卡清单」这种现成数据集</b>——无论是开源社区还是商业 API，都没有按「地铁站 → 值得逛的点」这种粒度整理好的中文公开数据。</li>
+<li><b>但可以用四层拼出来</b>，而且我已实测验证其中三层可跑：OSM（免费可分发、城区质量好）、文保单位名录（权威、专补冷门）、LLM 生成（补空白）、UGC（长期）。</li>
+<li><b>真正的瓶颈不是"拿不到数据"，是"冷门站恰恰没有数据"</b>——你最想要的祠堂/墓/碑这类冷点，公开 POI 覆盖率最低。这一层只能靠文保名录 + UGC。</li>
+<li><b>有个硬约束必须先知道</b>：高德/百度 POI 的服务条款禁止离线存储与再分发。你的游戏是单文件发在 GitHub Pages，所以这条路只能「运行时调用」，不能「烘焙进 HTML」。</li>
+</ol>
+</div>
+
+<h2>一、数据源实测结果</h2>
+<p>不是查资料，是本机真跑了请求。数字如下：</p>
+
+<table>
+<tr><th>数据源</th><th>实测结果</th><th>能拿到什么</th><th>协议 / 能不能内置</th></tr>
+<tr>
+  <td><b>OpenStreetMap</b><br><span class="small">Overpass API</span></td>
+  <td><span class="tag t-ok">可用</span><br><span class="small">北京地铁站 427 条 / 南京 294 条<br>站名匹配率 89.5% / 85.0%</span></td>
+  <td>景点、博物馆、文物、宗教场所、公园、艺术品<br><span class="small">例：南锣鼓巷 600m 内 → 文天祥祠、和敬公主府、孙中山行馆、清陆军部和海军部旧址、欧阳予倩故居</span></td>
+  <td><b>ODbL</b>，可自由分发<br>需署名</td>
+</tr>
+<tr>
+  <td><b>文保单位空间数据集</b><br><span class="small">国家地球系统科学数据中心</span></td>
+  <td><span class="tag t-mid">未实测下载</span><br><span class="small">需注册，2.47MB</span></td>
+  <td>全国八批 <b>5058 处</b>国家级文保单位，含 .shp 坐标 + .xls 属性（名称/批次/类型/年代）<br><span class="small">这正是"冷门历史现场"的权威清单</span></td>
+  <td>学术开放数据<br>需标注来源</td>
+</tr>
+<tr>
+  <td><b>Wikidata SPARQL</b></td>
+  <td><span class="tag t-ok">可用</span><br><span class="small">HTTP 200</span></td>
+  <td>博物馆、遗产、坐标、多语言标签</td>
+  <td>CC0，可自由分发</td>
+</tr>
+<tr>
+  <td><b>高德 / 腾讯 POI</b></td>
+  <td><span class="tag t-ok">端点通</span><br><span class="small">缺 key，返回 INVALID_USER_KEY</span></td>
+  <td>覆盖最全、最本土（餐饮/购物/打卡全有）</td>
+  <td><span class="tag t-no">不可离线存储</span><br>配额约 1 万次/月</td>
+</tr>
+<tr>
+  <td><b>Foursquare OS Places</b><br><span class="small">1.04 亿全球 POI</span></td>
+  <td><span class="tag t-no">中国覆盖差</span></td>
+  <td>—</td>
+  <td>开放许可</td>
+</tr>
+<tr>
+  <td><b>narutogo/china_subway</b><br><span class="small">GitHub</span></td>
+  <td><span class="tag t-mid">只有站名+线路</span><br><span class="small">无坐标</span></td>
+  <td>线路与站序（可校验你项目里的站序数据）</td>
+  <td>—</td>
+</tr>
+</table>
+
+<h3>覆盖率：冷热差距极大（这是最关键的实测发现）</h3>
+<table>
+<tr><th>站点</th><th>类型</th><th>600m 内 POI</th><th>样例</th></tr>
+<tr><td>天安门东</td><td>热</td><td class="num">25</td><td>翰林院遗址、华表</td></tr>
+<tr><td>菜市口</td><td>中</td><td class="num">12</td><td>湖南会馆、康有为故居、施愚山故居、毛泽东召集驱张大会遗址</td></tr>
+<tr><td>南锣鼓巷</td><td>热</td><td class="num">11</td><td>文天祥祠、和敬公主府、孙中山行馆</td></tr>
+<tr><td>朱辛庄</td><td>冷（昌平）</td><td class="num">0</td><td>—</td></tr>
+</table>
+
+<div class="warn">
+<b>冷站悖论：</b>你之前明确说过想要「冷门历史现场优先（祠堂/墓/碑等冷点）」。但实测下来，公开 POI 数据恰恰在冷站是空白——热门商圈一堆，郊区古碑一座没有。<br>
+所以「自动抓取」只能解决热门站；冷站必须走 <b>文保名录 + UGC</b>，这是绕不开的。
+</div>
+
+<h3>两个工程坑（真跑出来的）</h3>
+<ul>
+<li><b>Overpass 有严格限流</b>：连续请求会返回 429 / 504；一次性拉全市必超时。必须<b>分片（4×4=16 块）+ 镜像轮询 + 重试 + 去重</b>。我实测 16 片里失败了 8 片，其中正好包含主城区——所以任何"一次跑完"的脚本都得写容错。</li>
+<li><b>噪声数据</b>：世界公园里的微缩景观（Abu Simbel Temples、Arc de Triomphe）会被当成真 POI 抓进来。必须做<b>类别白名单 + 名称黑名单 + 文保/百科标记优先</b>的降噪。</li>
+</ul>
+
+<h2>二、推荐的数据分层架构</h2>
+<p>不要指望单一数据源吃下 676 站。四层叠加，每层补上一层的洞：</p>
+
+<div class="flow">
+<div><b>L1 事实层 · OSM</b> <span class="arrow">→</span> 自动抓，给城区站「附近有什么」的客观清单</div>
+<div><b>L2 权威层 · 文保单位名录</b> <span class="arrow">→</span> 按坐标匹配，专补冷门站的历史现场（祠堂/墓/碑/遗址）</div>
+<div><b>L3 生成层 · LLM</b> <span class="arrow">→</span> 对 L1+L2 都为空的站，用站名 + 片区 + 线路信息生成一版<b>草稿</b>，标注「未核实」</div>
+<div><b>L4 众包层 · UGC</b> <span class="arrow">→</span> 玩家补充真实推荐（哪家店、哪个门、怎么走），带审核与信誉</div>
+</div>
+
+<div class="note">
+<b>源透明度必须贯穿始终</b>（这是你在明朝项目里反复强调的纪律）：每一条内容都带来源标记
+<code>osm</code> / <code>文保名录</code> / <code>AI生成</code> / <code>玩家投稿</code>，卡片上直接显示。
+不能让玩家把 AI 草稿当成已核实的事实。
+</div>
+
+<h2>三、UGC + 后端同步：可以直接复用你现有的东西</h2>
+<p>你在 BSRI 项目里已经跑通了 <code>Cloudflare Worker + 匿名 128-bit uid</code> 这套。地铁卡片 UGC 用<b>同一套技术栈</b>最省事：</p>
+
+<div class="cols">
+<div class="col">
+<h4>存储</h4>
+<ul>
+<li><b>D1（SQL）</b>：投稿表 <code>(station_id, city, kind, text, author_uid, ts, status, votes)</code></li>
+<li><b>KV</b>：审核通过的内容缓存，前端一次拉全量（676 站的内容也就几百 KB）</li>
+<li>本地 <code>localStorage</code> 存「我投过什么 / 我点亮了什么」，离线可玩</li>
+</ul>
+</div>
+<div class="col">
+<h4>接口（Worker）</h4>
+<ul>
+<li><code>GET /tips?city=bj</code> 拉已通过投稿</li>
+<li><code>POST /tip</code> 投稿（进待审队列）</li>
+<li><code>POST /vote</code> 点赞 / <code>POST /report</code> 举报</li>
+<li><code>GET /mine?uid=</code> 取回我的投稿</li>
+</ul>
+</div>
+<div class="col">
+<h4>防滥用（UGC 必做）</h4>
+<ul>
+<li>投稿先进<b>待审</b>，不直接上线</li>
+<li>简单规则过滤：广告词、外链、手机号</li>
+<li>信誉分：投稿被采纳 +，被举报 −</li>
+<li>每人每天投稿上限（如 5 条）</li>
+</ul>
+</div>
+</div>
+
+<div class="warn">
+<b>一个必须提前想清楚的问题：</b>UGC 一旦开放，内容质量和合规责任就转移到你身上。
+「某某餐厅好吃」是主观推荐还好；但涉及价格、营业时间、医疗、安全类信息就会过期并可能误导。
+建议<b>只允许投「值得逛 / 值得吃」这类主观推荐，禁止投事实性断言</b>，并在卡片上统一标注「玩家投稿 · 未经核实」。
+</div>
+
+<h2>四、艾宾浩斯：怎么让「记住」真的发生</h2>
+
+<p>先说一个反直觉的判断：<b>单纯的复习弹窗会毁掉这个游戏</b>。贪吃蛇是 150ms 一拍的实时玩法，任何"停下来答题"的打断都会让人烦。所以复习机制必须<b>长在游戏里，而不是挡在游戏前</b>。</p>
+
+<h3>关键设计一：记忆等级 = 收集的第二维度</h3>
+<div class="good">
+<b>不要做两套系统。</b>现在是「吃过 + 读过卡 = 点亮」一维。建议加第二维：<b>记忆等级</b>（铜 → 银 → 金 → 钻）。
+点亮只代表"见过"，金/钻才代表"记住了"。这样"收集"和"记住"是同一个进度条的两个轴，而不是两个互不相干的玩法。
+</div>
+
+<h3>关键设计二：复习的最小单位要拆成「可判对错的一条事实」</h3>
+<p>SRS 只能测有标准答案的东西。所以卡片那段介绍文字不能被整体复习，必须拆成原子事实：</p>
+<pre>站点：菜市口
+├─ fact#1  附近有康有为故居          ← 可出四选一
+├─ fact#2  附近有湖南会馆            ← 可出四选一
+└─ fact#3  是 4 号线与 7 号线换乘站   ← 可出四选一</pre>
+<p>干扰项从<b>同城同类 POI</b>里抽（其他站的景点/故居），难度自然可控，而且顺便帮你记住别的站。</p>
+
+<h3>关键设计三：触发方式（三选一，建议 C）</h3>
+
+<div class="opt">
+<h4>A · 主动自习室</h4>
+<div class="meta">独立入口，每天登录后列出到期站点，逐条答题</div>
+<ul><li>+ 最纯粹，遗忘曲线执行得最准</li><li>− 和主玩法完全分离，像在做作业，玩蛇的人不会点</li></ul>
+</div>
+
+<div class="opt">
+<h4>B · 被动嵌入</h4>
+<div class="meta">玩的时候，到期站点在地图上发光；吃到该站豆子时先提问再给答案</div>
+<ul><li>+ 不打断节奏，复习自然发生</li><li>− 到期站点不一定被走到，覆盖率不可控；且"边跑边答"压力大</li></ul>
+</div>
+
+<div class="opt">
+<h4>C · 混合（推荐）<span class="rec">建议</span></h4>
+<div class="meta">默认走 B，攒够一定数量后主入口提示「今天有 N 站该复习」</div>
+<ul>
+<li>局内：到期站在小地图/视野里<b>微微发光</b>（复兴号），吃到时弹「回忆卡」——先出四选一，答对升级答错降级，然后才展示原卡片</li>
+<li>局外：主入口常显徽章「今日待复习 12 站」，点进去是 30 秒快速问答（A 模式）</li>
+<li>节奏：复习是<b>可选的加分项</b>，不是强制门槛——不复习也能玩，复习了升级快</li>
+</ul>
+</div>
+
+<h3>间隔怎么定</h3>
+<table>
+<tr><th>记忆等级</th><th>含义</th><th>下次复习间隔</th><th>答错</th></tr>
+<tr><td>铜</td><td>刚点亮</td><td>1 天</td><td rowspan="4">退回铜级，<br>间隔重置</td></tr>
+<tr><td>银</td><td>答对 1 次</td><td>3 天</td></tr>
+<tr><td>金</td><td>答对 2 次</td><td>7 天</td></tr>
+<tr><td>钻</td><td>答对 3 次</td><td>21 天（之后转长期）</td></tr>
+</table>
+<p class="small">间隔按<b>真实时间</b>（跨会话、存时间戳），不是游戏内时间——否则艾宾浩斯没有意义。</p>
+
+<h3>奖励闭环（让复习有动力）</h3>
+<ul>
+<li>答对 → 该站记忆等级 +1，同时给<b>一点点游戏内收益</b>（如 +1 节长度 / 短时加速），让"记住"直接兑现成"变强"</li>
+<li>一条线所有站都到<b>金级</b> → 解锁该线「线路徽章」+ 线路专属外观</li>
+<li>成就大图上用<b>颜色深浅</b>表示记忆等级（现在是三态：没去过/吃过/点亮，变成五态）</li>
+</ul>
+
+<h2>五、不同线路的收集模式</h2>
+<p>现在是「全网点亮获胜」单一目标。可以加的维度：</p>
+
+<div class="opt">
+<h4>A · 线路徽章（按线独立结算）</h4>
+<div class="meta">每条线集齐所有站 → 该线徽章；短线和长线难度天然不同</div>
+<ul><li>+ 最简单，和现有「电流蔓延」进度条天然契合</li><li>+ 短线（如南京 S9 只有 6 站）给正反馈快，长线（北京 10 号线）是长期目标</li><li>− 只是把总目标拆开，没有新玩法</li></ul>
+</div>
+
+<div class="opt">
+<h4>B · 线路专精（等级制）<span class="rec">建议和 A 叠加</span></h4>
+<div class="meta">每条线有独立等级 = 站点收集率 × 平均记忆等级</div>
+<ul><li>+ 把「收集」和「记住」绑在一条线上，正是上一节的核心思路</li><li>+ 升级解锁该线专属皮肤/能力（如 2 号线"环线"给转向冷却 −1）</li><li>− 需要设计 28 条线各自的奖励，工作量大</li></ul>
+</div>
+
+<div class="opt">
+<h4>C · 枢纽任务（跨线联动）</h4>
+<div class="meta">围绕换乘站设计组合任务：「在 3 条线的枢纽站各点亮 1 个」「一次换乘走完 2 号线 + 6 号线」</div>
+<ul><li>+ 让换乘玩法有目的，不只是换条线继续吃</li><li>− 任务设计容易变成清单打卡</li></ul>
+</div>
+
+<div class="opt">
+<h4>D · 轮换赛季</h4>
+<div class="meta">每周一条「本周特选线路」，进度双倍，过期不候</div>
+<ul><li>+ 制造回访理由，适合长期运营</li><li>− 和"全网点亮"的长期目标有冲突感</li></ul>
+</div>
+
+<div class="good">
+<b>我的建议：A + B 叠加，暂不做 C / D。</b><br>
+徽章（A）解决"短线给正反馈"，专精等级（B）解决"记住了要被看见"，两者共用同一套进度数据。
+C 和 D 等主线跑顺了再加——现在加只会让目标体系变复杂。
+</div>
+
+<h2>六、需要你拍板的三件事</h2>
+
+<div class="card">
+<b>① 数据先做哪一步？</b>
+<ul>
+<li><b>选项 1（推荐）</b>：我先跑通 OSM 自动化，产出北京 + 南京全部 676 站的<b>初版结构化数据</b>（含坐标、附近 POI、来源标记）。跑完你看质量再决定要不要接文保名录和 UGC。</li>
+<li><b>选项 2</b>：只做小样本（20 个代表性站点，热/中/冷各几座），先验证「自动生成的卡片到底好不好看、有没有用」，再决定要不要铺全量。</li>
+<li><b>选项 3</b>：先跳过数据，直接做 UGC 后端 + 艾宾浩斯复习机制，内容靠现有的 101 条手写卡先跑起来。</li>
+</ul>
+</div>
+
+<div class="card">
+<b>② 要不要接高德 POI？</b>
+<ul>
+<li>接 → 内容质量最高最本土，但<b>只能运行时调用</b>（不能内置进单文件），且你要提供 key、接受配额。</li>
+<li>不接 → 全部走 OSM + 文保 + UGC，可内置、可离线，但冷站偏空、餐饮类几乎没有。</li>
+</ul>
+</div>
+
+<div class="card">
+<b>③ 冷站（郊区古碑/祠堂）的内容怎么办？</b>
+<ul>
+<li>去国家地球系统科学数据中心下那份 <b>5058 处文保单位空间数据集</b>（需注册），按坐标匹配到地铁站 —— 这大概是最有针对性的一步。</li>
+<li>或者接受冷站暂时空白，靠 UGC 慢慢填。</li>
+</ul>
+</div>
+
+<div class="note" style="margin-top:26px">
+<b>顺带一个已有数据的问题：</b>南京 6 号线官方是 19 站，项目里写的是 20 站；北京昌平/房山/燕房/亦庄T1、南京 5/7/10/S4/S6/S8 的站序也还没抽查。
+如果要铺全量数据，建议先把站序校准——不然坐标会配错站。GitHub 上 <code>narutogo/china_subway</code> 有全国各线站序，可以用来做交叉校验。
+</div>
+
+</div>
+</body>
+</html>

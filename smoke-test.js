@@ -7,9 +7,10 @@ const fs = require("fs");
 const vm = require("vm");
 
 const html = fs.readFileSync(__dirname + "/play.html", "utf8");
-const m = html.match(/<script>([\s\S]*?)<\/script>/);
-if (!m) { console.error("FAIL: no <script> found"); process.exit(1); }
-const src = m[1];
+/* 页面里可能有多个内联 <script>（例如 METRO_GEO 数据块 + 主逻辑），
+   必须按出现顺序全部注入同一个 sandbox，否则主逻辑拿不到数据。 */
+const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
+if (!blocks.length) { console.error("FAIL: no <script> found"); process.exit(1); }
 
 /* parse the THEMES literal out of the page so tests can assert against the real data */
 const tm = html.match(/const THEMES = (\{[\s\S]*?\n\});[\s\S]*?function pickTheme/);
@@ -108,14 +109,16 @@ const expect = {
 };
 
 let ok = true;
+const MG_BY_THEME = {};
 for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
   const sb = makeSandbox(theme);
   try {
-    vm.runInNewContext(src, sb, { filename: "play.html" });
+    for (const b of blocks) vm.runInNewContext(b, sb, { filename: "play.html" });
   } catch (e) {
     console.error("FAIL [" + theme + "] eval threw:", e && e.stack || e);
     ok = false; continue;
   }
+  if (sb.METRO_GEO) MG_BY_THEME[theme] = sb.METRO_GEO;
   // title reflects theme
   if (sb.document.title !== expect[theme]) {
     console.error("FAIL [" + theme + "] title=" + JSON.stringify(sb.document.title) + " expected " + JSON.stringify(expect[theme]));
@@ -467,6 +470,38 @@ for (const id of ["beijing", "nanjing"]) {
   for (const s in seen) if (seen[s].size > 1) { c++; if (ex.length < 3) ex.push(s + "(" + [...seen[s]].join("/") + ")"); }
   if (c === 0) { console.error("FAIL [" + id + "] no transfer hubs in data"); ok = false; }
   else console.log("  [" + id + "] data transfer hubs: " + c + " (e.g. " + ex.join(" / ") + ")");
+
+  // 卡内「全城线路图」：每个站都必须能在真实坐标里定位，否则 drawCardMap 会直接隐藏地图
+  const MGcity = MG_BY_THEME[id];
+  const MG = MGcity && MGcity[id];
+  if (!MG) { console.error("FAIL [" + id + "] METRO_GEO 缺失，卡内线路图画不出来"); ok = false; continue; }
+  const uniqSt = new Set();
+  for (const L of T.lines) for (const s of L.stations) uniqSt.add(s);
+  const geoOf = {};
+  let ptsOk = 0;
+  for (const ln in MG) {
+    const L = MG[ln];
+    if (!L || !L.stations) { console.error("  [dbg] " + id + " line '" + ln + "' missing stations: " + JSON.stringify(Object.keys(L || {}))); continue; }
+    for (let i = 0; i < L.stations.length; i++) {
+      if (!L.pts[i]) continue;
+      if (!geoOf[L.stations[i]]) geoOf[L.stations[i]] = L.pts[i];
+      ptsOk++;
+    }
+  }
+  const miss = [...uniqSt].filter(s => !geoOf[s]);
+  if (miss.length) {
+    console.error("FAIL [" + id + "] " + miss.length + " 站没有真实坐标，线路图上找不到它: " + miss.slice(0, 6).join(","));
+    ok = false;
+  }
+  // 坐标必须落在城市合理范围内（经纬度写反/串城市会立刻暴露）
+  let bad = 0;
+  for (const s in geoOf) {
+    const [la, lo] = geoOf[s];
+    if (!(la > 25 && la < 45 && lo > 110 && lo < 125)) bad++;
+  }
+  if (bad) { console.error("FAIL [" + id + "] " + bad + " 个坐标超出中国东部范围（经纬度异常）"); ok = false; }
+  else console.log("  [" + id + "] 卡内线路图: " + Object.keys(MG).length + " 线 / " + ptsOk +
+    " 个真实坐标 · 覆盖 " + (uniqSt.size - miss.length) + "/" + uniqSt.size + " 站");
 }
 
 process.exit(ok ? 0 : 1);
