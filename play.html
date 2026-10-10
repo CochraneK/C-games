@@ -251,6 +251,11 @@ z-index 要压过页面标题栏，否则半透明卡片会和标题文字重影
   .card-tip{font-size:11px;color:var(--ink-soft);line-height:1.55;border-top:1px dashed var(--line);
     padding-top:4px;margin-top:2px;}
   .card-src{font-size:9.5px;color:#a9a29a;margin-top:5px;letter-spacing:.5px;}
+  /* 卡片右下角：两种坐标 —— 实际经纬度 + 官方线图序列（线名 第N/M站） */
+  .card-coord{margin:6px 0 2px;text-align:right;font-size:10px;line-height:1.6;
+    color:#6b655c;letter-spacing:.3px;border-top:1px dotted var(--line);padding-top:4px;}
+  .card-coord .ck{display:inline-block;min-width:46px;color:#a9a29a;font-size:9px;
+    letter-spacing:.5px;margin-right:5px;text-align:right;}
   /* 卡内「全网线路图」：真实经纬度等比投影，本站打金色亮点 */
   .card-map{margin:8px 0 10px;background:#f7f2e6;border:1px solid var(--line);
     border-radius:10px;padding:7px 7px 3px;}
@@ -1960,7 +1965,31 @@ function buildStationCard(name){
     if(more.length) rows.push({label:"这片区吃",items:more.slice(0,3)});
   }
   tip = (c&&c.tip) ? c.tip : (L?toEnd:"这一站还没有手写卡片，先记住它在 "+(L?L.name:"这条线")+" 上的位置和邻站吧。");
-  return {name:name,color:(L?L.color:"#1f6f6b"),kicker:kicker,rows:rows,tip:tip,hits:stationHits[name]||CARD_AT};
+  // 坐标：两种形式
+  //   ① 实际坐标 —— 真实经纬度（来自 OSM，METRO_GEO 里每站一对 [lat,lon]）
+  //   ② 官方线图坐标 —— 在「官方地铁线图」上的位置：每条经过本站的线，写成「线名 第N/M站」
+  var realLat=null, realLon=null, lineForms=[], li2;
+  if(THEME.lines){
+    for(li2=0; li2<THEME.lines.length; li2++){
+      var LL=THEME.lines[li2], idx=LL.stations.indexOf(name);
+      if(idx<0) continue;
+      lineForms.push(LL.name+" "+(idx+1)+"/"+LL.stations.length);
+      if(realLat===null && (typeof METRO_GEO!=="undefined") && METRO_GEO[THEME.id]){
+        var G=METRO_GEO[THEME.id][LL.name];
+        if(G && G.pts && G.pts[idx]){ realLat=G.pts[idx][0]; realLon=G.pts[idx][1]; }
+      }
+    }
+  }
+  var coord={ real:(realLat!==null)?fmtCoord(realLat,realLon):null,
+              line:lineForms.length?lineForms.join(" · "):null };
+  return {name:name,color:(L?L.color:"#1f6f6b"),kicker:kicker,rows:rows,tip:tip,
+          coord:coord,hits:stationHits[name]||CARD_AT};
+}
+/* 经纬度 → 人类可读的「°N/°S, °E/°W」 */
+function fmtCoord(lat,lon){
+  var la=(lat>=0?lat.toFixed(4)+"°N":(-lat).toFixed(4)+"°S");
+  var lo=(lon>=0?lon.toFixed(4)+"°E":(-lon).toFixed(4)+"°W");
+  return la+", "+lo;
 }
 /* 文字线的字符卡 */
 function buildCharCard(ch){
@@ -1982,6 +2011,11 @@ function cardHtml(name){
     h+='</ul></div>';
   }
   if(cd.tip) h+='<div class="card-tip">'+esc(cd.tip)+'</div>';
+  if(cd.coord && (cd.coord.real||cd.coord.line))
+    h+='<div class="card-coord">'+
+         (cd.coord.real?'<div><span class="ck">实际坐标</span>'+esc(cd.coord.real)+'</div>':'')+
+         (cd.coord.line?'<div><span class="ck">线图坐标</span>'+esc(cd.coord.line)+'</div>':'')+
+       '</div>';
   return h+'<div class="card-src">卡片内容：公开常识整理，未经实时核实 · 仅供趣味引导</div></div>';
 }
 /* 弹出站点卡 = 暂停游戏。
@@ -2009,6 +2043,11 @@ function showCard(cd){
     h+='</ul></div>';
   }
   if(cd.tip) h+='<div class="card-tip">'+esc(cd.tip)+'</div>';
+  if(cd.coord && (cd.coord.real||cd.coord.line))
+    h+='<div class="card-coord">'+
+         (cd.coord.real?'<div><span class="ck">实际坐标</span>'+esc(cd.coord.real)+'</div>':'')+
+         (cd.coord.line?'<div><span class="ck">线图坐标</span>'+esc(cd.coord.line)+'</div>':'')+
+       '</div>';
   h+='<div class="card-src">卡片内容：公开常识整理，未经实时核实 · 仅供趣味引导</div>'+
      '<div class="card-foot"><span class="card-hint">⏸ 游戏已暂停，读完再继续</span>'+
      '<button class="card-go">继续 ▸</button></div>';
@@ -3156,7 +3195,9 @@ function draw(a){
         ctx.beginPath(); ctx.arc(ex+sn.dir.x*er*0.35, ey+sn.dir.y*er*0.35, er*0.5,0,6.2832); ctx.fill();
       }
       ctx.font="10px sans-serif"; ctx.textAlign="center";
-      ctx.fillStyle=sn.isPlayer?sn.color:"rgba(70,66,60,.85)";
+      /* 地铁版：名字标签用「当前线路的真实颜色」，和蛇身、线路图一致（不再用灰色）；
+         文字版也用各自蛇色，统一。 */
+      ctx.fillStyle=sn.color;
       /* 进化阶段就标在名字后面（旗舰/传奇…），比 HUD 里再开一格直观 */
       ctx.fillText(sn.isPlayer? sn.name+" · "+EVOLVE[evolveStage(sn.body.length)].t : sn.name, H.x, H.y-CELL*0.52);
       MODE.drawHeadLabel(H,sn);   // 模式模块的蛇头附加标注
@@ -3203,7 +3244,9 @@ function draw(a){
   if(hitFlash>0){ ctx.fillStyle="rgba(200,50,30,"+(0.30*hitFlash)+")"; ctx.fillRect(0,0,S,SH); }
   // 换乘提示：屏幕中部闪一下「XX 换乘 → YY号线」
   if(transferHintT>0){
-    transferHintT-=dt/6;
+    // dt 不在 draw() 作用域内（定义在 frame() 里），改用帧率无关的常量递减，
+    // 避免 ReferenceError。原意即每帧递减一次，60fps 下 ≈2.7/帧（约 0.5s 闪现）。
+    transferHintT=Math.max(0, transferHintT-2.7);
     ctx.textAlign="center"; ctx.textBaseline="top";
     ctx.font="bold "+(CELL*0.62)+"px 'STKaiti','KaiTi','楷体',serif";
     ctx.fillStyle="rgba(217,164,65,"+Math.min(1,transferHintT/30).toFixed(2)+")";
@@ -3879,6 +3922,12 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
   cardHtml:function(name){
     var cd=buildStationCard(name), h=cd.kicker+" "+cd.name, i, k;
     for(i=0;i<cd.rows.length;i++){ h+=" | "+cd.rows[i].label+"："+cd.rows[i].items.join("、"); }
+    /* 右下角坐标：两种形式都要（无头自检 + 真实弹卡都用这份 builder）
+       ① 实际坐标 = 真实经纬度（°N/°E）  ② 线图坐标 = 官方线图序列「线名 第N/M站」 */
+    if(cd.coord && (cd.coord.real||cd.coord.line)){
+      if(cd.coord.real) h+=" | 实际坐标："+cd.coord.real;
+      if(cd.coord.line) h+=" | 线图坐标："+cd.coord.line;
+    }
     return h+" | "+cd.tip;
   },
   areaCount:function(){ var k=0, x; for(x in AREA) k++; return k; },

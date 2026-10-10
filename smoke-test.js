@@ -263,6 +263,23 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
       console.error("FAIL [" + theme + "] card fired before the 3rd eat: " + JSON.stringify(r3));
       ok = false;
     }
+    // 卡片右下角坐标：两种形式都该有
+    //   ① 实际坐标 = 真实经纬度（°N/°E）
+    //   ② 线图坐标 = 官方线图序列「线名 第N/M站」
+    // 用「本城真实存在的站」来验：天安门东只在北京，南京要用南京的站，
+    // 否则该站不属于本城任何线 → coord 必然为空 → 误报。
+    var probeStation = (T.lines && T.lines[0] && T.lines[0].stations.length > 13)
+      ? T.lines[0].stations[13] : "天安门东";
+    const ch = String(S.cardHtml(probeStation));
+    if (ch.indexOf("实际坐标") < 0 || !/°[NS]/.test(ch)) {
+      console.error("FAIL [" + theme + "] 卡片缺「实际坐标」（真实经纬度）: " + ch.slice(0, 120));
+      ok = false;
+    } else if (ch.indexOf("线图坐标") < 0 || !/号线 \d+\/\d+/.test(ch)) {
+      console.error("FAIL [" + theme + "] 卡片缺「线图坐标」（官方线图序列 线名 第N/M站）: " + ch.slice(0, 120));
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 卡片坐标: 实际经纬度 ✓ · 线图序列 ✓（" + probeStation + " → " + T.lines[0].name + " " + (T.lines[0].stations.indexOf(probeStation) + 1) + "/" + T.lines[0].stations.length + " 等）");
+    }
     // 弹卡必须暂停游戏，且关闭后恢复原状态（不然玩家在读卡时会被撞）
     // 用一个全新的站：cardsGot 已解锁的站不会二次弹卡，拿旧站测会误判
     S.closeCard();                              // 先清掉可能残留的卡片状态
