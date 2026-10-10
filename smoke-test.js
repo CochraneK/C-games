@@ -292,14 +292,33 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
         console.log("  [" + theme + "] 碰撞掉一半肉 ✓（20→10，掉落的肉成豆子）");
       }
     }
-    // 换乘站比例下降：pickSample 按权重抽样，transfer 占比应明显低于改之前的 ~15%
-    const ps = S.pickSample(600);
-    const trRatio = (ps.transfer || 0) / 600;
-    if (!(trRatio < 0.12)) {
-      console.error("FAIL [" + theme + "] 换乘站比例过高 " + (trRatio * 100).toFixed(1) + "%（应 <12%）: " + JSON.stringify(ps));
+    // 换乘站真实降频：⚠ 不能只看 STATION_W.transfer 的权重（那只管「显式换乘」一类，
+    // 实测占 9%），真正会弹面板的是「抽到的站本身是不是枢纽」，而枢纽天然占全站 ~27% ——
+    // 只调权重时实际占比仍有 59%(京)/52%(宁)。所以必须按站名统计，并断言通用池不产枢纽。
+    const hubStat = S.pickHubSample(1200);
+    const hRate = hubStat.hub / (hubStat.hub + hubStat.nonhub);
+    const leak = [];
+    for (const k of Object.keys(hubStat.byKind)) {
+      if (k === "transfer" || k === "next") continue;   // next 由站序决定，无法过滤
+      const b = hubStat.byKind[k];
+      if (b.n >= 30 && b.hub > 0) leak.push(k + "(" + b.hub + "/" + b.n + ")");
+    }
+    if (leak.length) {
+      console.error("FAIL [" + theme + "] 通用池仍在产出枢纽站（去枢纽过滤失效）: " + leak.join(","));
+      ok = false;
+    } else if (!(hRate < 0.35)) {
+      console.error("FAIL [" + theme + "] 枢纽站占比仍过高 " + (hRate * 100).toFixed(1) + "%（应 <35%）");
       ok = false;
     } else {
-      console.log("  [" + theme + "] 换乘站比例 " + (trRatio * 100).toFixed(1) + "% ✓（<12%，面板中断更少）");
+      console.log("  [" + theme + "] 枢纽占生成量 " + (hRate * 100).toFixed(1) + "% ✓（改前 59%/52%）· 通用池已去枢纽");
+    }
+    // 场上豆子的枢纽密度（玩家眼睛看到的），宽松守卫
+    const foodStat = S.foodHubRatio();
+    if (foodStat.total && !(foodStat.hub / foodStat.total < 0.45)) {
+      console.error("FAIL [" + theme + "] 场上豆子枢纽密度过高 " + foodStat.hub + "/" + foodStat.total);
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 场上豆子枢纽密度 " + (foodStat.total ? (foodStat.hub / foodStat.total * 100).toFixed(1) : 0) + "% ✓");
     }
     // 弹卡必须暂停游戏，且关闭后恢复原状态（不然玩家在读卡时会被撞）
     // 用一个全新的站：cardsGot 已解锁的站不会二次弹卡，拿旧站测会误判

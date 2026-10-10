@@ -519,6 +519,10 @@ const HIT_CD=600;           // 掉肉冷却，避免连掉
 /* 换乘保底节流：每拍都补换乘豆会让玩家附近永远有换乘站、频繁弹面板打断游戏。
    加冷却后，场上没有换乘豆时也最多每 TRANSFER_ENSURE_CD 拍才补一个（≈9s@150ms）。 */
 const TRANSFER_ENSURE_CD=60;
+/* 换乘面板节流：面板会暂停游戏（≥5s 倒计时），是最打断的一环。
+   刚弹过面板的 TRANSFER_PANEL_CD 拍内，再吃到换乘站就不再打断，
+   改为按 AI 推荐自动换线 + 一条非阻塞顶部提示。 */
+const TRANSFER_PANEL_CD=50;
 /* —— AI 变笨：半速 + 迟钝 + 近视 + 失误 —— */
 const BOT_SKIP=1;           // 1=与玩家同速（改 2 则对手半速）
 const BOOST_DROP=6;         // 长按加速：每走 6 步掉 1 节肉（肉落地成豆子，会被抢）
@@ -809,7 +813,18 @@ const MODES = {
             pendingTransfer=null;
           } else {
             if(!f._trOpts) f._trOpts=transferOptions(sn,f.name);
-            if(f._trOpts.length) pendingTransfer={sn:sn, name:f.name, opts:f._trOpts};
+            if(f._trOpts.length){
+              /* 面板节流：换乘面板会暂停游戏，是最打断的一环。
+                 刚弹过面板的 TRANSFER_PANEL_CD 拍内，再吃到换乘站就不再打断玩家 ——
+                 按 AI 推荐（还没点亮多少的线）自动换线，只留一条非阻塞的顶部提示。 */
+              if(tickCount - lastTransferPanel < TRANSFER_PANEL_CD){
+                var aw2=botWantTransfer(sn,f.name);
+                if(aw2>=0) doTransfer(sn,aw2,f.name);
+                pendingTransfer=null;
+              } else {
+                pendingTransfer={sn:sn, name:f.name, opts:f._trOpts};
+              }
+            }
           }
         } else {
           var want=botWantTransfer(sn,f.name);
@@ -820,7 +835,7 @@ const MODES = {
       // 换乘面板：只在玩家「首次」吃到某个换乘站时弹，避免连着吃到同类站时反复弹窗
       if(pendingTransfer && !pendingTransfer.shown){
         pendingTransfer.shown=1;
-        if(!transferHintT) showTransferPanel();
+        if(!transferHintT){ lastTransferPanel=tickCount; showTransferPanel(); }
       }
     },
     drawFood:function(f,FX,FY,pulse){ drawMetroFood(f,FX,FY,pulse); },
@@ -853,28 +868,46 @@ function stationIndex(){
      全网每站每次出现概率只剩约 0.08%，凑满 3 次要吃几千颗豆 —— 于是「站点卡片」
      和「换乘」玩着玩着就消失了。这是数学问题，不是代码 bug。
    加权后每一类核心玩法都有稳定供给：建设本线 / 凑齐出卡 / 换乘 都不会断供。 */
-var STATION_W={ next:26, nearCard:22, homeLine:18, transfer:6, unlit:8, other:6 };
+/* next 权重刻意压低：cand.next 只有「一个」站，权重一大就会把地图灌满这同一个站
+   （实测 26 时占 40% 的生成量）。ensureNextStation() 已保证场上至少有一个下一站，
+   所以这里调低不影响「按站序建设家园」的骨架玩法。 */
+var STATION_W={ next:12, nearCard:22, homeLine:18, transfer:6, unlit:8, other:6 };
 var pickLastKind="";
+/* 枢纽判定 + 去枢纽过滤。
+   ⚠ 关键：枢纽天然占全部车站 ~27%（北京 410 站里 111 个），所以「只把 transfer 那一类的权重调小」
+   根本压不住——其余大类（other/unlit/homeLine/nearCard）从全站池里抽，照样 ~27% 抽到枢纽。
+   实测改权重前后：真正会弹面板的枢纽占比仍有 59%（北京）/52%（南京）。
+   要真降频，必须把枢纽从这些通用池里剔掉，只留「显式 transfer 类 + 本线下一站」提供枢纽。 */
+function isHubName(nm){ return !!(nm && TRANSFER[nm] && TRANSFER[nm].length>1); }
+/* 去枢纽过滤。keepIfAll=1 的池（只有兜底池 other）在「全是枢纽」时才退回原数组，
+   避免空池；其余池一律返回 null，由调用方跳过该类别 —— 这样通用池绝不会产出枢纽。 */
+function nonHub(arr,keepIfAll){
+  var o=[], i;
+  for(i=0;i<arr.length;i++) if(!isHubName(arr[i])) o.push(arr[i]);
+  if(o.length) return o;
+  return keepIfAll?arr:null;
+}
 function pickStation(){
   if(!STATION_POOL.length) return {name:"站",line:"",color:"#888"};
   stationIndex();
   var L=(player&&player.homeLine)?player.homeLine:null;
   var cand={}, i, n, idx;
-  // ① 本线「下一站」：按真实站序建设家园，这是地铁版的骨架玩法
+  // ① 本线「下一站」：按真实站序建设家园，这是地铁版的骨架玩法。
+  //    就是这一个站（不参与去枢纽过滤），所以它是不是枢纽由站序决定。
   if(L){ idx=nextIdxOf(player); if(idx<L.stations.length) cand.next=[L.stations[idx]]; }
-  // ② 差一次就出卡：让「卡片」在后期还能持续弹出来的关键一类
-  var near=[];
+  // ② 差一次就出卡（去枢纽，避免弹卡后又弹换乘面板）
+  var near=[], f;
   for(n in stationHits){ if(stationHits[n]===CARD_AT-1 && !cardsGot[n]) near.push(n); }
-  if(near.length) cand.nearCard=near;
-  // ③ 本线其他站
-  if(L) cand.homeLine=L.stations.slice();
-  // ④ 换乘站：维持「换乘」玩法不断供
+  f=nonHub(near); if(f&&f.length) cand.nearCard=f;
+  // ③ 本线其他站（去枢纽）
+  if(L){ f=nonHub(L.stations.slice()); if(f&&f.length) cand.homeLine=f; }
+  // ④ 换乘站：唯一「刻意」提供枢纽的类，靠它维持换乘玩法不断供
   if(TRANSFER_NAMES.length) cand.transfer=TRANSFER_NAMES;
-  // ⑤ 全网还没点亮卡片的站：保证「点亮全网」这个总目标推得动
+  // ⑤ 全网还没点亮卡片的站（去枢纽）
   var unlit=[];
   for(i=0;i<ALL_STATION_NAMES.length;i++) if(!cardsGot[ALL_STATION_NAMES[i]]) unlit.push(ALL_STATION_NAMES[i]);
-  if(unlit.length) cand.unlit=unlit;
-  cand.other=ALL_STATION_NAMES;                       // ⑥ 兜底
+  f=nonHub(unlit); if(f&&f.length) cand.unlit=f;
+  cand.other=nonHub(ALL_STATION_NAMES,1);             // ⑥ 兜底（去枢纽，唯一允许退回全站的池）
 
   var keys=[], tot=0, k;
   for(k in cand){ if(STATION_W[k]){ keys.push(k); tot+=STATION_W[k]; } }
@@ -2267,6 +2300,7 @@ function openGallery(){
 var NET=null, NET_KEY="", NETVIEW=null, ACH_VIEW="mine";   // mine=只上色本线 / all=全网着色
 var ACHIEVE_KEY="snake_achieve_";     // localStorage：按主题分别存进度
 var pendingTransfer=null;              // 待确认的换乘 {sn,name,opts}
+var lastTransferPanel=-999;            // 上次真正弹出换乘面板的拍号（配合 TRANSFER_PANEL_CD 节流）
 var transferPaused=false, transferWasPaused=false, transferLeft=0;
 /* 换乘选择：弹面板时游戏暂停，给玩家 5 秒决定换不换、换成哪条。
    为什么必须有倒计时：换乘站是全局最该做决策的时刻（111 个枢纽），
@@ -3957,6 +3991,24 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
     return c; },
   pickIndex:function(){ stationIndex();
     return { all:ALL_STATION_NAMES?ALL_STATION_NAMES.length:0, tr:TRANSFER_NAMES?TRANSFER_NAMES.length:0 }; },
+  /* 真实「会让玩家弹换乘面板」的比例：pickSample 只报 kind（STATION_W 权重），
+     但真正触发面板的是「抽到的站名本身是不是枢纽」，而枢纽天然占全部车站 ~27%，
+     所以必须按站名统计，否则会显著低估。 */
+  pickHubSample:function(n){
+    var c={hub:0,nonhub:0,byKind:{}}, i, st, k, hub;
+    for(i=0;i<(n||400);i++){
+      st=pickStation(); k=pickLastKind;
+      hub=!!(st&&st.name&&TRANSFER[st.name]&&TRANSFER[st.name].length>1);
+      if(hub) c.hub++; else c.nonhub++;
+      if(!c.byKind[k]) c.byKind[k]={n:0,hub:0};
+      c.byKind[k].n++; if(hub) c.byKind[k].hub++;
+    }
+    return c; },
+  /* 场上现有豆子里，枢纽占多少（这才是玩家眼睛看到的密度） */
+  foodHubRatio:function(){
+    var i,h=0;
+    for(i=0;i<food.length;i++) if(food[i].name&&TRANSFER[food[i].name]&&TRANSFER[food[i].name].length>1) h++;
+    return {total:food.length, hub:h}; },
   cardStats:function(){ var k=0,n; for(n in cardsGot) if(cardsGot[n]) k++;
     var near=0; for(n in stationHits) if(stationHits[n]===CARD_AT-1 && !cardsGot[n]) near++;
     return { cards:k, near:near, hits:Object.keys(stationHits).length }; },
