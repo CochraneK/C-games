@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4efe6">
+<meta name="description" content="在一张小桌子旁，隔着距离一起翻牌、抢铃、说说话。">
+<title>叮！一起玩 · 双人翻牌</title>
+<link rel="stylesheet" href="./style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script defer src="./game-core.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<div class="page">
+  <header class="topbar">
+    <a class="home" href="../" aria-label="返回游戏合集">← 游戏合集</a>
+    <span class="eyebrow">BELL TOGETHER <span class="dot">•</span> TWO PLAYERS</span>
+    <button id="helpButton" class="text-button" type="button" aria-label="查看规则">怎么玩？</button>
+  </header>
+  <main>
+    <div class="heading">
+      <span class="kicker">把注意力放在同一张桌上</span>
+      <h1>叮！一起玩<span class="sparkle">✳</span></h1>
+      <p>看见恰好五个同种水果，就先一步按响铃铛。</p>
+    </div>
+    <section id="welcome" class="welcome panel" aria-label="加入游戏">
+      <div class="welcome-illustration" aria-hidden="true"><span>🍓</span><span class="small-bell">🔔</span><span>🍋</span></div>
+      <h2>邀请一个人，开始一局</h2>
+      <p>只要一个链接，不需要注册。也可以先自己练习一下。</p>
+      <div class="actions">
+        <button id="hostButton" class="primary" type="button">创建双人房间 <span aria-hidden="true">↗</span></button>
+        <button id="practiceButton" class="outline" type="button">单人练习</button>
+      </div>
+      <div class="join-entry"><label for="roomInput">已有房间码？</label><div class="join-box"><input id="roomInput" placeholder="输入邀请码" spellcheck="false" maxlength="15" autocomplete="off"><button id="joinButton" class="text-button" type="button">加入 →</button></div></div>
+      <p class="privacy-note">联机通过 PeerJS 公共信令建立 WebRTC 连接。麦克风默认关闭，不录音。房间链接请仅分享给想邀请的人。</p>
+    </section>
+
+    <section id="gameArea" class="game-area hidden" aria-label="游戏桌面">
+      <div class="room-line">
+        <div class="room-left"><span class="status-dot" id="statusDot"></span><span id="statusText" role="status" aria-live="polite">准备中</span></div>
+        <div class="room-right"><span id="roomLabel" class="room-code"></span><button id="copyButton" class="little-button" type="button">复制邀请</button></div>
+      </div>
+      <div class="players">
+        <div class="player" id="player0"><div class="player-title"><span class="avatar a">一</span><span id="name0">玩家一</span><span class="turn-indicator" id="turn0">轮到你</span></div><strong class="card-count"><span id="count0">28</span><small> 张牌</small></strong></div>
+        <div class="player" id="player1"><div class="player-title"><span class="avatar b">二</span><span id="name1">玩家二</span><span class="turn-indicator" id="turn1">轮到你</span></div><strong class="card-count"><span id="count1">28</span><small> 张牌</small></strong></div>
+      </div>
+      <div class="tabletop">
+        <div class="felt-ring"></div>
+        <div class="pile-column" id="pileArea0"><div class="pile-label"><span id="pileName0">玩家一</span><small>已翻 <span id="pileCount0">0</span></small></div><div class="card-place" id="card0" aria-label="玩家一的牌">?</div></div>
+        <div class="bell-column">
+          <button id="bellButton" class="bell-button" type="button" aria-label="抢铃"><svg viewBox="0 0 180 180" width="100%" height="100%" aria-hidden="true"><defs><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1bd"/><stop offset=".42" stop-color="#efbd59"/><stop offset="1" stop-color="#a76d21"/></linearGradient></defs><ellipse cx="90" cy="153" rx="70" ry="15" fill="#523e20" opacity=".19"/><path d="M33 140 Q39 58 88 51 Q143 54 149 140 Z" fill="url(#gold)" stroke="#a16c28" stroke-width="3"/><ellipse cx="91" cy="140" rx="60" ry="12" fill="#f6d98a" stroke="#a16c28" stroke-width="3"/><rect x="83" y="37" width="16" height="20" rx="7" fill="#a16c28"/><ellipse cx="91" cy="35" rx="19" ry="10" fill="url(#gold)" stroke="#b08037" stroke-width="2"/><path d="M60 119 Q56 80 85 68" fill="none" stroke="#fff7db" stroke-width="7" stroke-linecap="round" opacity=".7"/></svg></button>
+          <span class="bell-caption" id="bellCaption">抢铃 · 空格</span>
+        </div>
+        <div class="pile-column" id="pileArea1"><div class="pile-label"><span id="pileName1">玩家二</span><small>已翻 <span id="pileCount1">0</span></small></div><div class="card-place" id="card1" aria-label="玩家二的牌">?</div></div>
+      </div>
+      <p id="gameMessage" class="game-message" aria-live="polite">等待对方加入，或者先熟悉桌面。</p>
+      <div class="bottom-controls">
+        <button id="flipButton" class="primary flip-button" type="button">翻一张牌 <span>↗</span></button>
+        <div class="right-controls"><button id="voiceButton" class="outline compact" type="button"><span id="micIcon">♩</span><span id="voiceText">开启语音</span></button><button id="restartButton" class="outline compact" type="button">重新开局</button></div>
+      </div>
+      <div class="hint" id="gameHint">轮到你时点“翻一张牌”或按 Enter。谁都可以随时抢铃。</div>
+      <div class="connection-note">双人对局使用浏览器间连接，轻量试玩版不保证跨网络成功；比赛结果以房主判定为准。</div>
+    </section>
+    <footer class="footer">一张桌子 · 两个人 · 一声叮</footer>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="rulesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rulesTitle"><div class="modal-card"><button id="closeRules" class="modal-close" type="button" aria-label="关闭">×</button><div class="modal-eyebrow">THE RULES</div><h2 id="rulesTitle">恰好五个，马上按铃</h2><p>双方轮流翻牌，桌面上每人只展示自己最上面的一张。只要某种水果的总数<strong>恰好是 5</strong>，谁先按铃，谁收走桌面上所有已翻的牌。</p><p>误按铃铛，需要给对方 1 张牌。没有牌可以再翻时，仍有机会在最后一张明牌被拿走前抢铃。</p><p>电脑：<kbd>Enter</kbd> 翻牌，<kbd>空格</kbd> 抢铃。手机：直接触摸。</p><p class="muted">经典 56 张水果牌的双人简化版。网络比赛设约 180 毫秒竞争窗口；窗口内双方均抢铃时随机裁定，无法完全消除网络延迟差异。</p><button id="rulesGotIt" class="primary" type="button">知道啦</button></div></div>
+<audio id="remoteAudio" autoplay playsinline></audio>
+</body>
+</html>
