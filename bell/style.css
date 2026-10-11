@@ -102,3 +102,12 @@
  .invite-copy strong{font-size:12px;letter-spacing:1px}
  .lobby-invite .little-button{font-size:10px;padding:8px}
 }
+
+
+/* Bell multi-room discoverability */
+.multiplayer-banner{display:flex;gap:14px;align-items:center;justify-content:space-between;margin:12px auto 0;max-width:760px;padding:16px 18px;border:1px solid #d1dfd5;background:#f0f5ed;border-radius:17px}
+.multiplayer-banner strong{font-size:15px;color:#315f4c}
+.multiplayer-banner p{color:#6e8373;font-size:11px;line-height:1.65;margin:6px 0 0}
+.multiplayer-link{background:#386a55;color:#fff!important;white-space:nowrap;border-radius:10px;padding:13px 14px;font-size:12px;font-weight:600;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.multiplayer-link:hover{background:#254f40}
+@media(max-width:680px){.multiplayer-banner{flex-direction:column;align-items:stretch;margin:4px auto 0;padding:13px 15px;gap:11px}.multiplayer-banner strong{font-size:14px}.multiplayer-link{width:100%}}
