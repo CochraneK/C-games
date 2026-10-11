@@ -68,8 +68,8 @@ function renderLobby(){
  document.body.classList.toggle('in-lobby',showing);
  const connected=Boolean(conn?.open);
  const seat=selfSeat(),self=seatReady[seat],other=seatReady[1-seat];
- $('selfPresence').textContent=connected?'已连接':'已入座 · 等待连接';
- $('peerPresence').textContent=connected?'已连线 · 在线':'等待朋友加入…';
+ $('selfPresence').textContent=connected?(voiceEnabled?'已连接 · 开麦中':'已连接'):'已入座 · 等待连接';
+ $('peerPresence').textContent=connected?(remoteVoiceEnabled?'已在线 · 对方已开麦':'已连线 · 在线'):'等待朋友加入…';
  $('selfReady').textContent=self?'✓ 已准备':'未准备';
  $('peerReady').textContent=!connected?'未入座':other?'✓ 已准备':'未准备';
  $('selfReady').classList.toggle('ready',self);
@@ -332,17 +332,17 @@ function attachConnection(c){
     send({type:'welcome',kind:gameKind,state:snapshot(),...roomDetails()});
     broadcastRoom();toast('朋友已经入座！双方准备后开始');
 
-    if(mic&&voiceEnabled)send({type:'voice-ready'});
+    if(mic&&voiceEnabled){send({type:'voice-ready'});send({type:'voice-status',enabled:true});}
   }else{
     status('已经连上房主','live');send({type:'hello'});
-    if(mic&&voiceEnabled)send({type:'voice-ready'});
+    if(mic&&voiceEnabled){send({type:'voice-ready'});send({type:'voice-status',enabled:true});}
   }
   render();
  });
  c.on('data',data=>{if(c===conn)onData(data);});
  c.on('close',()=>{
   if(c!==conn)return;
-  conn=null;remoteReady=false;voiceConnected=false;
+  conn=null;remoteReady=false;remoteVoiceEnabled=false;voiceConnected=false;
   if(call){call.close();call=null;}
   setReady(false);
   if(mode==='host'){
