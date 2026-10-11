@@ -27,9 +27,15 @@ jobs:
           node --check bell/app.js
           node --check bell/game-core.js
           node --check bell/pan-core.js
+          node --check bell/multi/core.js
+          node --check bell/multi/app.js
       - name: Classic game rules
         run: node bell/tests/core.test.js
       - name: Pan Heart rules
         run: node bell/tests/pan-core.test.js
       - name: Two-browser lobby simulation
         run: node bell/tests/lobby.test.js
+      - name: Multiplayer rules (2–8 seats)
+        run: node bell/multi/tests/core.test.js
+      - name: Four-browser nickname and readiness simulation
+        run: node bell/multi/tests/room.test.js
