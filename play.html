@@ -734,16 +734,8 @@ function applyLine(sn, li, fromStation){
   }
   sn.homeGlow=12;
 }
-/* 开局偏好起点：北京地铁 2 号线 · 积水潭（用户指定的起点站）。
-   仅当本主题真有「2号线」且它含「积水潭」才生效（南京 2 号线没有积水潭 → 退回随机起点）。 */
-function preferredStart(){
-  if(!THEME.lines) return null;
-  for(var i=0;i<THEME.lines.length;i++){
-    var L=THEME.lines[i];
-    if(L.name==="2号线" && L.stations.indexOf("积水潭")>=0) return {li:i, station:"积水潭"};
-  }
-  return null;
-}
+/* 注：开局不钉死某条线某座站 —— 线路走 shuffledAssign() 随机发，
+   起点站在该线内随机取。「2号线·积水潭」只是用户举的说明性例子，不是硬需求。 */
 /* ════════════════════════════════════════════════════════════════════════
    模式模块（MODE）：文字线 text  /  地铁线 metro
    —— 引擎只调用 MODE.xxx() 这套钩子，完全不判断「当前是什么模式」。
@@ -1797,9 +1789,6 @@ function reset(){
   // 文字版没有 lines，跳过分配（沿用固定名字）
   var nLines=(MODE.lineBased&&THEME.lines)?THEME.lines.length:0;
   lineAssign=nLines?shuffledAssign(nLines):[];
-  // 开局偏好起点：北京 2 号线·积水潭（用户指定）。仅在玩家没有手动选线时生效，手动选线优先。
-  var ps0=preferredStart();
-  if(ps0 && !(playerLineIdx>0)) lineAssign[0]=ps0.li;
   if(nLines && playerLineIdx>0 && THEME.lines[playerLineIdx]){
     // 手动指定：把玩家换到指定线，同时把原来占用这条线的蛇挪走，保证「每线一条蛇」不破
     var at=lineAssign.indexOf(playerLineIdx);
@@ -1811,12 +1800,10 @@ function reset(){
   player=spawnSnake({id:0,name:pd.name,color:pd.color,isPlayer:true, len:pLen});
   if(nLines) applyLine(player, lineAssign[0]||0);      // 身份 = 领到的线路
   else player.homeLine=MODE.homeLineFor(0,true);
-  // Phase D 规则②：开局起点站（curStation = 当前所在站，沿真实站序前进的锚点）
-  // 北京模式默认从「2号线·积水潭」发车（用户指定）；其他情况随机某站。
+  // Phase D 规则②：开局随机某条线的某一站（curStation = 当前所在站，沿真实站序前进的锚点）
   if(player.homeLine){
     var L0=player.homeLine, k0=(Math.random()*L0.stations.length)|0;
-    var ps1=preferredStart();
-    var ss0 = (ps1 && ps1.li===player.lineIdx) ? ps1.station : L0.stations[k0];
+    var ss0=L0.stations[k0];
     player.curStation=ss0;
     var pg0=player.lineProg[player.lineIdx];
     if(pg0){ pg0.built[ss0]=1; pg0.next=Math.min(L0.stations.indexOf(ss0)+1, L0.stations.length); }
