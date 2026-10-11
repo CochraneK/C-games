@@ -514,8 +514,11 @@ var METRO_GEO={"beijing":{"1号线":{"color":"#A9043B","pts":[[39.9248,116.172],
 "use strict";
 /* ===== 配置 ===== */
 const WCOLS=64, WROWS=64;
-const FOOD_TARGET=24;       // 常驻「可吃」豆子：当前线相邻两站（其余车站作为「环境站」ambient 浮在地图上，看得见吃不到）
-const AMBIENT_TARGET=150;   // 屏幕上「环境站」数量：全城其他线路 / 本线非相邻车站，玩家自己找换乘站
+const FOOD_TARGET_TEXT=170;  // 文字版常驻豆子数（文字版没有「环境站」概念，全靠豆子铺满地图）
+const FOOD_TARGET_METRO=24;  // 地铁版「可吃」豆子数：当前线相邻两站（可吃的目标本来就只有 2 个名字，不需要多）
+const AMBIENT_TARGET=150;    // 地铁版「环境站」数：全城其他线路 / 本线非相邻车站，看得见吃不到，玩家自己找换乘站
+/* 可吃豆上限按模式区分：文字版铺满，地铁版刻意少（视觉密度由环境站补）。 */
+function foodTarget(){ return (MODE&&MODE.lineBased) ? FOOD_TARGET_METRO : FOOD_TARGET_TEXT; }
 const BOT_COUNT=6;
 /* 视野缩放：格子尺寸自适应屏幕，保证「蛇看得清」。
    以前 CELL 写死 30px → 屏幕越大格子越多、蛇越细（全屏 1920 宽能显示 64 列，蛇细成一条线）。
@@ -827,7 +830,10 @@ const MODES = {
        只有玩家把当前线所有站都吃遍（lineComplete），才触发「换乘站特殊功能」，自由选择任意换乘站替换。 */
     onEat:function(sn,f){
       tryBuildHome(sn,f);
-      if(sn.isPlayer) sn.curStation = f.name;     // 蛇头当前所在站 = 刚吃到的站（沿真实站序前进的锚点）
+      if(sn.isPlayer){
+        sn.curStation = f.name;     // 蛇头当前所在站 = 刚吃到的站（沿真实站序前进的锚点）
+        retuneFood();               // 站前进了 → 把场上「上一站的邻站」等陈旧豆子改名回合法相邻站
+      }
       if(sn.isPlayer) onStationEaten(sn,f);
       // 换乘闸门：整条线吃完才算「解锁」。解锁后玩家弹「自由选择任意换乘站」面板；
       // 之后锁定（trArmed=false），吃完整条新线之前不得再换乘。
@@ -922,6 +928,40 @@ function pickStation(){
   for(q=0;q<STATION_POOL.length;q++) if(STATION_POOL[q].name===nm) pool.push(STATION_POOL[q]);
   return pool.length ? pool[(Math.random()*pool.length)|0]
                      : {name:nm, line:L.name, color:L.color};
+}
+/* 把一颗可吃豆改成指定站名（保持线路色 / 换乘标记同步）。
+   用于「玩家前进后，把已经不在相邻两站范围内的陈旧豆子改回合法站名」。 */
+function renameFood(f,nm){
+  if(!nm) return;
+  stationIndex();
+  var L=(player&&player.homeLine)?player.homeLine:null;
+  f.name=nm;
+  f.line=L?L.name:(f.line||"");
+  f.lcolor=L?L.color:(f.lcolor||"#888");
+  var tr=TRANSFER[nm];
+  f.transfer=(tr&&tr.length>1)?tr.slice():null;
+}
+/* 新规则守卫：玩家吃掉一站、curStation 前进后，地图上「以前刷出来」的豆子还带着旧站名
+   （例：当前站白堆子，相邻是白石桥南/军事博物馆，但场上还留着上一站的邻站「国家图书馆」）。
+   玩家一旦吃到它，curStation 会被凭空拽到两三站以外 —— 「只能吃相邻两站」就名存实亡。
+   所以每次 curStation 变化，把所有越界豆子就地改名回「当前站的相邻两站」之一。
+   改名而非删除：豆子数量（视觉密度）不变，只是名字始终是合法目标。 */
+function retuneFood(){
+  if(!player||!player.homeLine||!player.curStation) return;
+  stationIndex();
+  var L=player.homeLine, ci=L.stations.indexOf(player.curStation);
+  if(ci<0) return;
+  var nb=[], i;
+  if(ci+1<L.stations.length) nb.push(L.stations[ci+1]);
+  if(ci-1>=0) nb.push(L.stations[ci-1]);
+  if(!nb.length) return;
+  var ok={};
+  for(i=0;i<nb.length;i++) ok[nb[i]]=1;
+  for(i=0;i<food.length;i++){
+    var f=food[i];
+    if(!f.name || ok[f.name]) continue;
+    renameFood(f, nb[(Math.random()*nb.length)|0]);
+  }
 }
 /* ════════════════════════════════════════════════════════════════════════
    站点卡片数据（机制②的一半）
@@ -1704,6 +1744,8 @@ function spawnFood(n){
    不进 food[]，所以蛇头碾过不会吃、不影响分区配额。 */
 function spawnAmbient(n){
   stationIndex();
+  // 文字版（su/77）没有车站概念，STATION_POOL 为空 —— 环境站只属于地铁模式，直接跳过。
+  if(!STATION_POOL.length) return;
   var occ=occSet(), heads=headList(), i;
   for(i=0;i<n;i++){
     var c=pickFoodCell(occ,heads);
@@ -1713,7 +1755,10 @@ function spawnAmbient(n){
       transfer:(TRANSFER[p.name]&&TRANSFER[p.name].length>1)?TRANSFER[p.name].slice():null, ambient:true});
   }
 }
-function maintainAmbient(){ if(ambient.length<AMBIENT_TARGET) spawnAmbient(AMBIENT_TARGET-ambient.length); }
+function maintainAmbient(){
+  if(!STATION_POOL.length) return;      // 文字版无车站，不生成环境站
+  if(ambient.length<AMBIENT_TARGET) spawnAmbient(AMBIENT_TARGET-ambient.length);
+}
 /* 豆子再平衡：把「挤爆的分区」里、而且此刻没人正对着吃的豆子搬到空区。
    等于持续削掉「人堆 + 豆堆」这种磁铁组合。
    ⚠ 必须先 recountZones()：蛇掉肉、撞死都会直接把豆子塞进数组，
@@ -1816,7 +1861,7 @@ function reset(){
     else bs.homeLine=MODE.homeLineFor(i+1,false);
     snakes.push(bs); }
   camX=player.body[0].x; camY=player.body[0].y; camInit=true;
-  scoreEl.textContent=player.score; updateBoard(); spawnFood(FOOD_TARGET);
+  scoreEl.textContent=player.score; updateBoard(); spawnFood(foodTarget());
   buildNets();                     // 本局目标：把全网车站都点亮
 }
 
@@ -1898,6 +1943,16 @@ function autoThink(sn){
 /* 某条蛇在它当前线路上的「下一站」序号（进度按线分别记，换乘回来还在） */
 function nextIdxOf(sn){
   if(!sn||!sn.homeLine) return 0;
+  var st=sn.homeLine.stations;
+  /* 新规则：「下一站」= 当前站的前向邻站（到线尾则后向），与「只能吃相邻两站」严格一致。
+     原来直接读建站指针 pg.next —— 玩家往回吃时 pg.next 会停在前方好几站，
+     金色圆圈 / HUD「下一站」就指向一个既不在地图上、也不在可吃范围内的站，玩家会白追。
+     现在无论怎么吃，指示器永远指向一个「ensureNextStation() 已保证在图上」的可吃邻站。 */
+  if(sn.curStation){
+    var ci=st.indexOf(sn.curStation);
+    if(ci>=0 && ci+1<st.length) return ci+1;   // 向前一站
+    if(ci>0) return ci-1;                      // 到线尾 → 向后一站
+  }
   var pg=sn.lineProg&&sn.lineProg[sn.lineIdx];
   return pg?(pg.next||0):0;
 }
@@ -2790,6 +2845,7 @@ function doTransfer(sn, li, stationName){
   sn.curStation=stationName;                          // 锚点跳到换乘站：新线的相邻两站从这里接着算
   sn.trArmed=false;                                   // 锁定：吃完整条新线前不得再换乘
   if(sn.isPlayer){
+    retuneFood();                                     // 换线后原豆子全是旧线的站名，改成新线相邻站
     transferHint=stationName+" 换乘 → "+sn.homeLine.name;
     transferHintT=90;
     saveProgress();
@@ -3043,8 +3099,9 @@ function tick(now){
   }
   for(i=0;i<snakes.length;i++) moveSnake(snakes[i],now);
   if(player && player.alive && player.boosting) moveSnake(player,now);
-  if(food.length<FOOD_TARGET) spawnFood(FOOD_TARGET-food.length);
-  maintainAmbient();   // 环境站随可吃豆子一起补充
+  var FT=foodTarget();
+  if(food.length<FT) spawnFood(FT-food.length);
+  maintainAmbient();   // 环境站随可吃豆子一起补充（文字版 STATION_POOL 为空 → 内部直接跳过）
   // 每 FOOD_REBALANCE 拍做一次分区再平衡：尸体豆堆在一起时会被摊开
   if(tickCount%FOOD_REBALANCE===0) rebalanceFood();
   MODE.onTick();   // 模式模块每拍附加逻辑（地铁版=保证「下一站」在地图上）
@@ -4233,6 +4290,25 @@ window.__SNAKE__={
   playerLine:function(){ return player?player.lineIdx:-1; },
   playerLineName:function(){ return (player&&player.homeLine)?player.homeLine.name:""; },
   netTarget:function(){ return NET_TARGET; },
+  /* —— 新规则自检：可吃豆 = 当前站相邻两站；环境站 = 全城其他站（可见不可吃） —— */
+  metroState:function(){
+    if(!player||!player.homeLine) return null;
+    return {cur:player.curStation, line:player.homeLine.name, lineIdx:player.lineIdx,
+            trArmed:!!player.trArmed, complete:lineComplete(player)};
+  },
+  adjacentNames:function(){
+    if(!player||!player.homeLine||!player.curStation) return [];
+    var L=player.homeLine, ci=L.stations.indexOf(player.curStation), o=[];
+    if(ci<0) return [];
+    if(ci+1<L.stations.length) o.push(L.stations[ci+1]);   // 向前一站
+    if(ci-1>=0) o.push(L.stations[ci-1]);                   // 向后一站
+    return o;
+  },
+  foodNames:function(){ var o=[],i; for(i=0;i<food.length;i++) o.push(food[i].name); return o; },
+  foodCount:function(){ return food.length; },
+  ambientCount:function(){ return ambient.length; },
+  ambientLines:function(){ var s={},i; for(i=0;i<ambient.length;i++) s[ambient[i].line]=1; return Object.keys(s); },
+  ambientSample:function(n){ var o=[],i; for(i=0;i<ambient.length&&o.length<n;i++) o.push({name:ambient[i].name,line:ambient[i].line}); return o; },
   /* 找一个「玩家换乘后仍能换」的站：取一个 ≥3 线的大枢纽 */
   hubWithOptions:function(){
     var best=null, i, j;

@@ -186,11 +186,17 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
   }
   // 机制① 运行中的拥挤度：不再要求「互不接触」（那不现实），而是看豆子是否铺开
   // 豆子分区均衡：不能全堆在少数分区里（那会把所有蛇吸到同一片）
+  const isMetro = !!(THEMES[theme] && THEMES[theme].kind === "metro");
   const zones = S.zoneCounts();
   const nonEmpty = zones.filter(v => v > 0).length;
   const maxZone = Math.max(...zones);
-  if (!(nonEmpty >= 24)) {
-    console.error("FAIL [" + theme + "] only " + nonEmpty + "/64 zones have food (should spread map-wide)");
+  /* 地铁版「可吃豆」刻意只有 ~24 颗（且只有「相邻两站」2 个站名）——铺满地图靠的是
+     「环境站」ambient（150 个），所以覆盖面改由 ambient 断言负责，这里只查「别堆在一处」。
+     文字版没有环境站概念，仍要求豆子本身铺满地图。 */
+  const needZones = isMetro ? 12 : 24;
+  if (!(nonEmpty >= needZones)) {
+    console.error("FAIL [" + theme + "] only " + nonEmpty + "/64 zones have food (need >=" + needZones +
+      (isMetro ? "，地铁版覆盖面看 ambient" : "") + ")");
     ok = false;
   }
   if (!(maxZone <= 9)) {
@@ -338,36 +344,63 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
       const b = hubStat.byKind[k];
       if (b.n >= 30 && b.hub > 0) leak.push(k + "(" + b.hub + "/" + b.n + ")");
     }
-    if (leak.length) {
-      console.error("FAIL [" + theme + "] 通用池仍在产出枢纽站（去枢纽过滤失效）: " + leak.join(","));
-      ok = false;
-    } else {
-      // 宽松回归守卫：单看随机开局线会抖动（主线 1 号线枢纽密集），真正口径看 hubRateByLine
-      if (hRate >= 0.75) {
-        console.error("FAIL [" + theme + "] 枢纽占比异常偏高 " + (hRate * 100).toFixed(1) + "%（去枢纽过滤疑似失效）");
-        ok = false;
-      } else {
-        console.log("  [" + theme + "] 枢纽占生成量（本局随机线）" + (hRate * 100).toFixed(1) + "% · 通用池已去枢纽（公正口径见全线路平均）");
-      }
-    }
-    // 场上豆子的枢纽密度（玩家眼睛看到的）—— 确定性、按全线路平均（foodHubRatioByLine），
-    // 消除「随机开局线」抖动：单看某条枢纽密集线会虚高到 58%+，全线路平均才是公正口径（京 27% / 宁 14%）。
+    /* 新规则下「通用池」这个概念已不存在：pickStation() 只从「当前站相邻两站」取名，
+       不再有 other/unlit/homeLine/nearCard 等通用池，也就无从「泄漏枢纽」。
+       而且用户明说本线没通时「换乘站和普通站效果一样，频率一样」——枢纽本来就该正常出现。
+       所以这里降级为纯参考输出，不再判失败。 */
+    console.log("  [" + theme + "] 枢纽占生成量（本局随机线）" + (hRate * 100).toFixed(1) +
+      "% · 新规下枢纽=普通站，非判据（byKind: " + Object.keys(hubStat.byKind).join("/") + "）");
+    /* ── 新规则（用户「理顺规则」）───────────────────────────────────────────
+       旧的「枢纽降频」判据已被新规覆盖：用户明确说本线没通时
+       「换乘站和普通站效果一样，频率一样」，且换乘面板被「整条线吃完」锁死，
+       所以枢纽占比不再打断游戏 → 不再是失败条件。
+       真正要保证的是两条新不变量：① 吃不外线/非邻站 ② 线没通不许换乘。 */
     const foodStat = S.foodHubRatioByLine();
-    if (foodStat.total && !(foodStat.hub / foodStat.total < 0.40)) {
-      console.error("FAIL [" + theme + "] 场上豆子枢纽密度过高 " + foodStat.hub + "/" + foodStat.total);
-      ok = false;
-    } else {
-      console.log("  [" + theme + "] 场上豆子枢纽密度(全线路平均) " + (foodStat.total ? (foodStat.hub / foodStat.total * 100).toFixed(1) : 0) + "% ✓");
-    }
-    // 全线路平均枢纽占比（消除「随机开局线」抖动）：枢纽只能来自相邻站/本线枢纽，
-    // revisit/other 已去枢纽，所以公正口径下应明显低于 Phase C 改前的 59%/52%
+    console.log("  [" + theme + "] 场上豆子枢纽密度(参考·新规下非判据) " +
+      (foodStat.total ? (foodStat.hub / foodStat.total * 100).toFixed(1) : 0) + "%");
     const bl = S.hubRateByLine(30);
     const blRate = bl.hub / (bl.hub + bl.nonhub);
-    if (!(blRate < 0.40)) {
-      console.error("FAIL [" + theme + "] 全线路平均枢纽占比仍过高 " + (blRate * 100).toFixed(1) + "%（应 <40%）");
+    console.log("  [" + theme + "] 全线路平均枢纽占比(参考·新规下非判据) " + (blRate * 100).toFixed(1) + "%");
+
+    // 新不变量①：可吃豆 ⊆ 当前站的相邻两站（绝不能出现其他线路 / 本线非邻站的站名）
+    const adj = S.adjacentNames();
+    const fnames = S.foodNames();
+    if (!adj.length) {
+      console.error("FAIL [" + theme + "] adjacentNames() 为空，无法校验可吃豆范围");
       ok = false;
     } else {
-      console.log("  [" + theme + "] 全线路平均枢纽占比 " + (blRate * 100).toFixed(1) + "% ✓（改前 59%/52% · 只相邻站/本线枢纽产枢纽）");
+      const bad = [...new Set(fnames.filter(n => adj.indexOf(n) < 0))];
+      if (bad.length) {
+        console.error("FAIL [" + theme + "] 可吃豆里出现「非相邻站」: " + bad.slice(0, 5).join(",") +
+          "（相邻两站应为 " + adj.join(" / ") + "）");
+        ok = false;
+      } else {
+        console.log("  [" + theme + "] 可吃豆 " + fnames.length + " 颗，全部落在相邻两站 [" + adj.join(" / ") + "] ✓");
+      }
+    }
+    // 新不变量②：环境站铺满地图且跨多条线路（「全城站都出现在地图上，玩家自己找」）
+    const ambN = S.ambientCount(), ambLines = S.ambientLines();
+    if (!(ambN >= 100)) {
+      console.error("FAIL [" + theme + "] 环境站只有 " + ambN + " 个（应 ≥100，负责铺满地图）");
+      ok = false;
+    } else if (!(ambLines.length >= 5)) {
+      console.error("FAIL [" + theme + "] 环境站只覆盖 " + ambLines.length + " 条线（应跨多条，玩家才找得到换乘站）");
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 环境站 " + ambN + " 个 · 覆盖 " + ambLines.length + " 条线路 ✓（可见不可吃）");
+    }
+    // 新不变量③：换乘闸门 —— 本线没吃完，trArmed 必须为 false（不得弹换乘面板）
+    const ms = S.metroState();
+    if (!ms) {
+      console.error("FAIL [" + theme + "] metroState() 为空");
+      ok = false;
+    } else if (ms.complete) {
+      console.log("  [" + theme + "] 本线已通(" + ms.line + ") · trArmed=" + ms.trArmed + " → 允许换乘");
+    } else if (ms.trArmed) {
+      console.error("FAIL [" + theme + "] 本线未通却已解锁换乘(trArmed=true)，违反「吃完整条线才解锁」");
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 换乘闸门 ✓ 本线未通(" + ms.line + " · 当前站 " + ms.cur + ") → 未解锁");
     }
     // 机制② 改（Phase D 规则④）：首次吃站弹「信息框」——必须「不暂停」，
     //   否则玩家读卡时会被撞/被打断（违背 Phase B「选择太打断」的诉求）。暂停行为仍由换乘面板校验（见机制⑤）。
