@@ -8,6 +8,7 @@
 <title>叮！一起玩 · 双人翻牌</title>
 <link rel="stylesheet" href="./style.css">
 <script defer src="./game-core.js"></script>
+<script defer src="./pan-core.js"></script>
 <script defer src="./app.js"></script>
 </head>
 <body>
@@ -20,8 +21,8 @@
   <main>
     <div class="heading">
       <span class="kicker">把注意力放在同一张桌上</span>
-      <h1>叮！一起玩<span class="sparkle">✳</span></h1>
-      <p>看见恰好五个同种水果，就先一步按响铃铛。</p>
+      <h1 id="gameTitle">叮！一起玩<span class="sparkle">✳</span></h1>
+      <p id="gameLead">看见恰好五个同种水果，就先一步按响铃铛。</p>
     </div>
     <section id="welcome" class="welcome panel" aria-label="加入游戏">
       <div class="welcome-illustration" aria-hidden="true"><span>🍓</span><span class="small-bell">🔔</span><span>🍋</span></div>
@@ -39,6 +40,15 @@
       <div class="room-line">
         <div class="room-left"><span class="status-dot" id="statusDot"></span><span id="statusText" role="status" aria-live="polite">准备中</span></div>
         <div class="room-right"><span id="roomLabel" class="room-code"></span><button id="copyButton" class="little-button" type="button">复制邀请</button></div>
+      </div>
+      <div class="game-tabs" role="group" aria-label="双人游戏模式">
+        <button type="button" id="tabClassic" class="game-tab selected" aria-pressed="true"><span>🍓</span> 德国心脏病</button>
+        <button type="button" id="tabPan" class="game-tab" aria-pressed="false"><span>♠</span> 潘神心脏病 <small>54 张扑克</small></button>
+      </div>
+      <div class="pan-summary hidden" id="panSummary" aria-label="潘神双人比分">
+        <div class="score-mini"><small>你</small><strong id="panYouScore">0</strong><span id="panYouHits">抢中 0 · 误拍 0</span></div>
+        <div class="round-clock"><small>计时对局</small><strong id="panClock">03:00</strong><span>每局三分钟</span></div>
+        <div class="score-mini"><small>对方</small><strong id="panOtherScore">0</strong><span id="panOtherHits">抢中 0 · 误拍 0</span></div>
       </div>
       <div class="players">
         <div class="player" id="player0"><div class="player-title"><span class="avatar a">一</span><span id="name0">玩家一</span><span class="turn-indicator" id="turn0">轮到你</span></div><strong class="card-count"><span id="count0">28</span><small> 张牌</small></strong></div>
@@ -65,7 +75,13 @@
   </main>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div id="rulesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rulesTitle"><div class="modal-card"><button id="closeRules" class="modal-close" type="button" aria-label="关闭">×</button><div class="modal-eyebrow">THE RULES</div><h2 id="rulesTitle">恰好五个，马上按铃</h2><p>双方轮流翻牌，桌面上每人只展示自己最上面的一张。只要某种水果的总数<strong>恰好是 5</strong>，谁先按铃，谁收走桌面上所有已翻的牌。</p><p>误按铃铛，需要给对方 1 张牌。没有牌可以再翻时，仍有机会在最后一张明牌被拿走前抢铃。</p><p>电脑：<kbd>Enter</kbd> 翻牌，<kbd>空格</kbd> 抢铃。手机：直接触摸。</p><p class="muted">经典 56 张水果牌的双人简化版。网络比赛设约 180 毫秒竞争窗口；窗口内双方均抢铃时随机裁定，无法完全消除网络延迟差异。</p><button id="rulesGotIt" class="primary" type="button">知道啦</button></div></div>
+<div id="rulesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rulesTitle"><div class="modal-card"><button id="closeRules" class="modal-close" type="button" aria-label="关闭">×</button><div class="modal-eyebrow">THE RULES</div><div id="classicRules"><h2 id="rulesTitle">恰好五个，马上按铃</h2><p>双方轮流翻牌，桌面上每人只展示自己最上面的一张。只要某种水果的总数<strong>恰好是 5</strong>，谁先按铃，谁收走桌面上所有已翻的牌。</p><p>误按铃铛，需要给对方 1 张牌。没有牌可以再翻时，仍有机会在最后一张明牌被拿走前抢铃。</p><p>电脑：<kbd>Enter</kbd> 翻牌，<kbd>空格</kbd> 抢铃。手机：直接触摸。</p><p class="muted">经典 56 张水果牌的双人简化版。网络比赛设约 180 毫秒竞争窗口；窗口内双方均抢铃时随机裁定，无法完全消除网络延迟差异。</p></div><div id="panRules" class="hidden">
+<h2>潘神心脏病 · 双人改编</h2>
+<p>使用 <strong>54 张扑克牌</strong>，含 52 张标准牌与大小王。双方轮流翻一张牌，只看每人面前最新翻出的明牌。</p>
+<p>出现以下任意条件，马上抢拍铃铛：<strong>任一张是 7；两张数字牌（A=1，2–10）之和为 7 的倍数；出现 J、Q、K 或大小王。</strong> 这些规则来自你提供的课堂改编说明。</p>
+<p>抢对，收走双方已翻出的牌，<strong>加 2 分</strong>；误拍，赔对方 1 张牌并<strong>减 1 分</strong>。一方手牌耗尽仍可抢最后的明牌；被收走后可能出局。</p>
+<p>原图是 7–8 人玩法和多人排名；这里明确改为<strong>双人计时对局（每局 3 分钟）</strong>，到时优先按分数判胜，分数相同再看剩余手牌。双人版没有“指认第三方”的环节。</p>
+<p class="muted">一局结束后可重开，也可切回德国心脏病。切换游戏不需要重新进入房间，已建立的语音保持连接。电脑空格抢拍、回车翻牌，手机点按。</p></div><button id="rulesGotIt" class="primary" type="button">知道啦</button></div></div>
 <audio id="remoteAudio" autoplay playsinline></audio>
 </body>
 </html>
