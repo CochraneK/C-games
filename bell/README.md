@@ -50,6 +50,10 @@
 - 抢铃以房主的事件处理为准，并设有 180ms 竞争窗口；窗口内两个玩家都按铃时随机决胜，不能彻底消除网络延迟。
 - 房间没有持久保存，刷新房主页面会重置牌局。访客断线时可以重新打开邀请链接尝试重连。新版可增加真正的自动重连、房间密码与服务器仲裁。
 
+## 自动质量门槛
+
+`.github/workflows/bell-tests.yml` 在 Bell 改动时自动执行 3 组测试。请注意测试模拟的是网络消息与 UI 状态，**不能替代双设备实时语音和公网穿透测试**。
+
 ## 项目结构
 
 - `index.html` 页面
@@ -59,6 +63,7 @@
 - `app.js` 用户交互、PeerJS 实时数据、WebRTC 音频、练习对手
 - `tests/core.test.js` 德国心脏病规则测试
 - `tests/pan-core.test.js` 潘神心脏病规则测试
+- `tests/lobby.test.js` 模拟两个浏览器双向准备、开局、翻牌与换模式
 
 ## 本地预览
 
@@ -67,6 +72,7 @@ python3 -m http.server 8080
 # http://localhost:8080/bell/ （如运行目录为 snake-games 根目录）
 node bell/tests/core.test.js
 node bell/tests/pan-core.test.js
+node bell/tests/lobby.test.js
 ```
 
 本地 `localhost` 上可以测试语音权限；两台设备请使用 GitHub Pages HTTPS 地址，不能直接用普通 HTTP 局域网地址请求麦克风。
