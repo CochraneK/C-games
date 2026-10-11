@@ -514,7 +514,8 @@ var METRO_GEO={"beijing":{"1号线":{"color":"#A9043B","pts":[[39.9248,116.172],
 "use strict";
 /* ===== 配置 ===== */
 const WCOLS=64, WROWS=64;
-const FOOD_TARGET=170;      // 常驻豆子更多，随处有得吃
+const FOOD_TARGET=24;       // 常驻「可吃」豆子：当前线相邻两站（其余车站作为「环境站」ambient 浮在地图上，看得见吃不到）
+const AMBIENT_TARGET=150;   // 屏幕上「环境站」数量：全城其他线路 / 本线非相邻车站，玩家自己找换乘站
 const BOT_COUNT=6;
 /* 视野缩放：格子尺寸自适应屏幕，保证「蛇看得清」。
    以前 CELL 写死 30px → 屏幕越大格子越多、蛇越细（全屏 1920 宽能显示 64 列，蛇细成一条线）。
@@ -733,6 +734,16 @@ function applyLine(sn, li, fromStation){
   }
   sn.homeGlow=12;
 }
+/* 开局偏好起点：北京地铁 2 号线 · 积水潭（用户指定的起点站）。
+   仅当本主题真有「2号线」且它含「积水潭」才生效（南京 2 号线没有积水潭 → 退回随机起点）。 */
+function preferredStart(){
+  if(!THEME.lines) return null;
+  for(var i=0;i<THEME.lines.length;i++){
+    var L=THEME.lines[i];
+    if(L.name==="2号线" && L.stations.indexOf("积水潭")>=0) return {li:i, station:"积水潭"};
+  }
+  return null;
+}
 /* ════════════════════════════════════════════════════════════════════════
    模式模块（MODE）：文字线 text  /  地铁线 metro
    —— 引擎只调用 MODE.xxx() 这套钩子，完全不判断「当前是什么模式」。
@@ -756,6 +767,7 @@ function applyLine(sn, li, fromStation){
      buildPanel()           构建侧边面板
    ════════════════════════════════════════════════════════════════════════ */
 var STATION_POOL=[], TRANSFER={}, LINE_COLOR={};
+var ambient=[];            // 环境站：非可吃，纯展示（全城车站浮在地图上，玩家自己找换乘站）
 
 const MODES = {
   /* ───────── 模块 A：文字线（蛇身是文字链，豆子里是字） ───────── */
@@ -818,46 +830,27 @@ const MODES = {
               transfer:(tr&&tr.length>1)?tr.slice():null, value:value||1};
     },
     onTick:function(){ ensureNextStation(); },
-    /* 地铁版：吃到站 → 推进当前站 + 建设家园 + 换乘判定 + 打卡信息框 */
+    /* 地铁版：吃到站 → 推进当前站 + 建设家园 + 打卡信息框。
+       新规则：换乘被「整条线吃完」这道闸锁死 —— 中途吃到的换乘枢纽只是普通站，绝不弹面板；
+       只有玩家把当前线所有站都吃遍（lineComplete），才触发「换乘站特殊功能」，自由选择任意换乘站替换。 */
     onEat:function(sn,f){
       tryBuildHome(sn,f);
-      // Phase D 规则②：蛇头当前所在站 = 刚吃到的站（沿真实站序前进的锚点）
-      if(sn.isPlayer) sn.curStation = f.name;
-      // 换乘站：仅当该站「在当前线路上」才允许换乘（规则①：换乘只能在当前线路的站点触发）
-      var L=sn.homeLine;
-      if(f.name && L && L.stations.indexOf(f.name)>=0 && TRANSFER[f.name] && TRANSFER[f.name].length>1){
-        if(sn.isPlayer){
-          if(autoMode){
-            /* 托管全自动：不弹换乘面板，AI 直接选「自己还没点亮多少」的线换过去，
-               让玩家在挂机时也能一条条线推进，不用任何手动操作。 */
-            var aw=botWantTransfer(sn,f.name);
-            if(aw>=0) doTransfer(sn,aw,f.name);
-            pendingTransfer=null;
-          } else {
-            if(!f._trOpts) f._trOpts=transferOptions(sn,f.name);
-            if(f._trOpts.length){
-              /* 面板节流：换乘面板会暂停游戏，是最打断的一环。
-                 刚弹过面板的 TRANSFER_PANEL_CD 拍内，再吃到换乘站就不再打断玩家 ——
-                 按 AI 推荐（还没点亮多少的线）自动换线，只留一条非阻塞的顶部提示。 */
-              if(tickCount - lastTransferPanel < TRANSFER_PANEL_CD){
-                var aw2=botWantTransfer(sn,f.name);
-                if(aw2>=0) doTransfer(sn,aw2,f.name);
-                pendingTransfer=null;
-              } else {
-                pendingTransfer={sn:sn, name:f.name, opts:f._trOpts};
-              }
-            }
-          }
-        } else {
-          var want=botWantTransfer(sn,f.name);
-          if(want>=0 && Math.random()<0.55) doTransfer(sn,want,f.name);
-        }
-      }
+      if(sn.isPlayer) sn.curStation = f.name;     // 蛇头当前所在站 = 刚吃到的站（沿真实站序前进的锚点）
       if(sn.isPlayer) onStationEaten(sn,f);
-      // 换乘面板：只在玩家「首次」吃到某个换乘站时弹，避免连着吃到同类站时反复弹窗
-      if(pendingTransfer && !pendingTransfer.shown){
-        pendingTransfer.shown=1;
-        if(!transferHintT){ lastTransferPanel=tickCount; showTransferPanel(); }
+      // 换乘闸门：整条线吃完才算「解锁」。解锁后玩家弹「自由选择任意换乘站」面板；
+      // 之后锁定（trArmed=false），吃完整条新线之前不得再换乘。
+      if(lineComplete(sn)){
+        if(!sn.trArmed){
+          sn.trArmed=true;
+          if(sn.isPlayer){
+            if(autoMode) botCityTransfer(sn);       // 托管：自动选最弱线换过去
+            else openCityTransfer();                // 手动：弹面板让玩家自由挑换乘站
+          } else {
+            botCityTransfer(sn);                     // 对手：自动换线，保持推进
+          }
+        }
+      } else {
+        sn.trArmed=false;
       }
     },
     drawFood:function(f,FX,FY,pulse){ drawMetroFood(f,FX,FY,pulse); },
@@ -916,48 +909,27 @@ function nonHub(arr,keepIfAll){
   if(o.length) return o;
   return keepIfAll?arr:null;
 }
+/* 新规则（用户「理顺规则」诉求）：当前线「可吃」的豆子 = 蛇头当前站的相邻两站（上一站/下一站）。
+   其余线路 / 本线非相邻站一律不进「可吃」池 —— 它们只作为「环境站」(ambient) 浮在地图上，看得见、吃不到。
+   这样严格满足「2 号线只能吃当前站的相邻两站」，同时全城其他站（如 3 号线石佛营）仍在地图上，由玩家自己去找。 */
 function pickStation(){
   if(!STATION_POOL.length) return {name:"站",line:"",color:"#888"};
   stationIndex();
   var L=(player&&player.homeLine)?player.homeLine:null;
-  var sn=player, cand={}, i, n;
-  if(L && sn && sn.curStation){
-    var ci=L.stations.indexOf(sn.curStation);
-    // ① 相邻站（上一站 / 下一站）：地铁版骨架，沿真实站序前进；最多两个，由站序决定（可能含枢纽）
-    var nb=[];
-    if(ci>=0){
-      if(ci+1<L.stations.length) nb.push(L.stations[ci+1]);
-      if(ci-1>=0) nb.push(L.stations[ci-1]);
-    }
-    if(nb.length) cand.next=nb;
-    // ② 吃过的站（重吃长大，Phase D 规则⑤）：本线已点亮的非枢纽站
-    var eaten=[];
-    for(n in cardsGot){ if(cardsGot[n] && !isHubName(n) && L.stations.indexOf(n)>=0) eaten.push(n); }
-    if(eaten.length) cand.revisit=eaten;
+  if(!L || !player || !player.curStation) return {name:"站",line:"",color:"#888"};
+  var ci=L.stations.indexOf(player.curStation);
+  var nb=[];
+  if(ci>=0){
+    if(ci+1<L.stations.length) nb.push(L.stations[ci+1]);   // 向前一站
+    if(ci-1>=0) nb.push(L.stations[ci-1]);                   // 向后一站
   }
-  // ③ 当前线换乘枢纽：唯一允许弹换乘面板的站；只取「本线真有的枢纽」
-  //    （规则①：换乘只能在当前线路的站点触发 —— 不在本线的枢纽绝不出现为可换目标）
-  if(L){
-    var tr=[];
-    for(i=0;i<TRANSFER_NAMES.length;i++){ var nm=TRANSFER_NAMES[i]; if(L.stations.indexOf(nm)>=0) tr.push(nm); }
-    if(tr.length) cand.transfer=tr;
-  }
-  // ④ 兜底：本线其它非枢纽站（避免空池时完全没豆，也保证世界不空）
-  if(L){ var oth=nonHub(L.stations.slice()); if(oth&&oth.length) cand.other=oth; }
-  var keys=[], tot=0, k;
-  for(k in cand){ if(STATION_W[k]){ keys.push(k); tot+=STATION_W[k]; } }
-  if(!keys.length){ cand.other=nonHub(ALL_STATION_NAMES,1); if(cand.other){ keys=["other"]; tot=STATION_W.other; } }
-  var r=Math.random()*tot, acc=0, pick="other";
-  for(i=0;i<keys.length;i++){ acc+=STATION_W[keys[i]]; if(r<=acc){ pick=keys[i]; break; } }
-  pickLastKind=pick;                                  // 供自检探针统计分布
-  var arr=cand[pick]||cand.other;
-  if(!arr||!arr.length) arr=cand.other||(ALL_STATION_NAMES&&ALL_STATION_NAMES.length?ALL_STATION_NAMES:["站"]);
-  n=arr[(Math.random()*arr.length)|0];
+  if(!nb.length) nb=[L.stations[0]];                        // 兜底（单站线不会出现）
+  var nm=nb[(Math.random()*nb.length)|0];
   // 同名站可能属于多条线（如「新街口」京宁都有），从池里随机挑一条的真实归属
   var pool=[], q;
-  for(q=0;q<STATION_POOL.length;q++) if(STATION_POOL[q].name===n) pool.push(STATION_POOL[q]);
+  for(q=0;q<STATION_POOL.length;q++) if(STATION_POOL[q].name===nm) pool.push(STATION_POOL[q]);
   return pool.length ? pool[(Math.random()*pool.length)|0]
-                     : {name:n, line:(L?L.name:""), color:(L?L.color:"#888")};
+                     : {name:nm, line:L.name, color:L.color};
 }
 /* ════════════════════════════════════════════════════════════════════════
    站点卡片数据（机制②的一半）
@@ -1735,6 +1707,21 @@ function spawnFood(n){
     pushFood(c.x,c.y,1);
   }
 }
+/* 环境站：全城车站（含其他线路、本线非相邻站）随机散布在地图上，纯展示、不可吃。
+   玩家靠它们「找换乘站」——肉眼认出换乘枢纽，吃完整条线后再去换。
+   不进 food[]，所以蛇头碾过不会吃、不影响分区配额。 */
+function spawnAmbient(n){
+  stationIndex();
+  var occ=occSet(), heads=headList(), i;
+  for(i=0;i<n;i++){
+    var c=pickFoodCell(occ,heads);
+    occ[c.x+","+c.y]=1;
+    var p=STATION_POOL[(Math.random()*STATION_POOL.length)|0];
+    ambient.push({x:c.x,y:c.y,name:p.name,line:p.line,color:p.color,
+      transfer:(TRANSFER[p.name]&&TRANSFER[p.name].length>1)?TRANSFER[p.name].slice():null, ambient:true});
+  }
+}
+function maintainAmbient(){ if(ambient.length<AMBIENT_TARGET) spawnAmbient(AMBIENT_TARGET-ambient.length); }
 /* 豆子再平衡：把「挤爆的分区」里、而且此刻没人正对着吃的豆子搬到空区。
    等于持续削掉「人堆 + 豆堆」这种磁铁组合。
    ⚠ 必须先 recountZones()：蛇掉肉、撞死都会直接把豆子塞进数组，
@@ -1810,6 +1797,9 @@ function reset(){
   // 文字版没有 lines，跳过分配（沿用固定名字）
   var nLines=(MODE.lineBased&&THEME.lines)?THEME.lines.length:0;
   lineAssign=nLines?shuffledAssign(nLines):[];
+  // 开局偏好起点：北京 2 号线·积水潭（用户指定）。仅在玩家没有手动选线时生效，手动选线优先。
+  var ps0=preferredStart();
+  if(ps0 && !(playerLineIdx>0)) lineAssign[0]=ps0.li;
   if(nLines && playerLineIdx>0 && THEME.lines[playerLineIdx]){
     // 手动指定：把玩家换到指定线，同时把原来占用这条线的蛇挪走，保证「每线一条蛇」不破
     var at=lineAssign.indexOf(playerLineIdx);
@@ -1821,12 +1811,15 @@ function reset(){
   player=spawnSnake({id:0,name:pd.name,color:pd.color,isPlayer:true, len:pLen});
   if(nLines) applyLine(player, lineAssign[0]||0);      // 身份 = 领到的线路
   else player.homeLine=MODE.homeLineFor(0,true);
-  // Phase D 规则②：小蛇开局随机某条线的某一站（curStation = 当前所在站，沿真实站序前进的锚点）
+  // Phase D 规则②：开局起点站（curStation = 当前所在站，沿真实站序前进的锚点）
+  // 北京模式默认从「2号线·积水潭」发车（用户指定）；其他情况随机某站。
   if(player.homeLine){
     var L0=player.homeLine, k0=(Math.random()*L0.stations.length)|0;
-    player.curStation=L0.stations[k0];
+    var ps1=preferredStart();
+    var ss0 = (ps1 && ps1.li===player.lineIdx) ? ps1.station : L0.stations[k0];
+    player.curStation=ss0;
     var pg0=player.lineProg[player.lineIdx];
-    if(pg0){ pg0.built[player.curStation]=1; pg0.next=Math.min(k0+1, L0.stations.length); }
+    if(pg0){ pg0.built[ss0]=1; pg0.next=Math.min(L0.stations.indexOf(ss0)+1, L0.stations.length); }
   }
   snakes.push(player);
   var nBots=MODE.botCount();
@@ -2807,6 +2800,8 @@ function doTransfer(sn, li, stationName){
   if(!sn||!sn.homeLine) return;
   var old=sn.homeLine.name;
   applyLine(sn, li, stationName);                     // 换身份 + 接续该线进度
+  sn.curStation=stationName;                          // 锚点跳到换乘站：新线的相邻两站从这里接着算
+  sn.trArmed=false;                                   // 锁定：吃完整条新线前不得再换乘
   if(sn.isPlayer){
     transferHint=stationName+" 换乘 → "+sn.homeLine.name;
     transferHintT=90;
@@ -2833,8 +2828,85 @@ function botWantTransfer(sn, stationName){
   }
   return best;
 }
-
-/* ===== 大作战机制 ===== */
+/* 当前线是否已「吃完」：本线所有站都进过 built（= 至少被吃到过一次）。
+   这是换乘闸门的唯一条件 —— 没吃完整条线，绝不允许换乘。 */
+function lineComplete(sn){
+  if(!sn||!sn.homeLine) return false;
+  var pg=sn.lineProg&&sn.lineProg[sn.lineIdx];
+  if(!pg) return false;
+  var st=sn.homeLine.stations;
+  for(var i=0;i<st.length;i++) if(!pg.built[st[i]]) return false;
+  return true;
+}
+/* 两市同名站（新街口/杨庄/奥体中心）按城市聚合过，所以「任意换乘站」直接列全网枢纽即可。
+   每个枢纽挑一条「不是当前线」的线作为替换目标；理论上枢纽≥2线，必有非当前线。 */
+function cityTransferOptions(sn){
+  stationIndex();
+  var out=[], i;
+  for(i=0;i<TRANSFER_NAMES.length;i++){
+    var nm=TRANSFER_NAMES[i], lines=TRANSFER[nm], li=-1, j;
+    for(j=0;j<lines.length;j++){ var l=lineIndexOf(lines[j]); if(l>=0 && l!==sn.lineIdx){ li=l; break; } }
+    if(li<0) li=lineIndexOf(lines[0]);
+    if(li<0) continue;
+    out.push({lineIdx:li, name:nm, color:THEME.lines[li].color});
+  }
+  return out;
+}
+/* 找两条线共用的换乘站（没有就返回 null，调用方退而求其次落到新线起点）。 */
+function findSharedHub(li1,li2){
+  var L1=THEME.lines[li1], L2=THEME.lines[li2];
+  for(var i=0;i<L1.stations.length;i++) if(L2.stations.indexOf(L1.stations[i])>=0) return L1.stations[i];
+  return null;
+}
+/* 对手自动换乘：选「自己还没吃遍、剩下的站最多」的线换过去，保持推进。 */
+function botCityTransfer(sn){
+  var best=-1, bestScore=1e9, i;
+  for(i=0;i<THEME.lines.length;i++){
+    if(i===sn.lineIdx) continue;
+    var L=THEME.lines[i];
+    var pg=(sn.lineProg&&sn.lineProg[i])||null;
+    var unread=L.stations.length-(pg?Object.keys(pg.built).length:0);
+    var s=unread+Math.random()*2;
+    if(s<bestScore){ bestScore=s; best=i; }
+  }
+  if(best<0) return;
+  var hub=findSharedHub(sn.lineIdx,best);
+  doTransfer(sn,best,hub||THEME.lines[best].stations[0]);
+}
+/* 玩家「自由选择任意换乘站」面板：复用 #trPanel，但选项 = 全网换乘枢纽（不是当前线某站的可换线）。
+   点一个枢纽 = 直接换乘到该枢纽（挑一条非当前线），从那里接着吃新线。 */
+function openCityTransfer(){
+  if(!player||!player.alive||!MODE.lineBased||transferPaused) return;
+  var p=document.getElementById("trPanel"), box=document.getElementById("trOpts"),
+      stEl=document.getElementById("trStation");
+  if(!p||!box) return;
+  var opts=cityTransferOptions(player);
+  if(stEl) stEl.textContent="本线已通 · 选择任意换乘站替换";
+  box.innerHTML="";
+  box.style.maxHeight="42vh"; box.style.overflowY="auto";
+  for(var i=0;i<opts.length;i++){
+    (function(o){
+      var b=document.createElement("button");
+      b.className="tr-chip";
+      b.innerHTML='<span class="sw" style="background:'+o.color+'"></span>'+o.name;
+      b.addEventListener("click",function(){ doTransfer(player,o.lineIdx,o.name); hideTransferPanel(); });
+      box.appendChild(b);
+    })(opts[i]);
+  }
+  p.classList.add("on");
+  transferWasPaused=paused; transferPaused=true; paused=true;
+  transferLeft=TRANSFER_MS;
+  var pb=document.getElementById("pauseBtn"); if(pb) pb.textContent="继续";
+  updateTransferCountdown();
+}
+/* HUD「换乘」按钮：仅在本线已通（可换乘）时可见可点。 */
+function updateTransferBtn(){
+  var b=document.getElementById("trBtn");
+  if(!b||!MODE.lineBased) return;
+  if(player && player.alive && lineComplete(player) && !transferPaused){
+    b.style.display=""; b.disabled=false; b.textContent="🚉 换乘 →";
+  } else { b.style.display="none"; }
+}
 function dropMeat(sn,n){
   recountZones();
   for(var i=0;i<n && sn.body.length>START_LEN;i++){
@@ -2985,6 +3057,7 @@ function tick(now){
   for(i=0;i<snakes.length;i++) moveSnake(snakes[i],now);
   if(player && player.alive && player.boosting) moveSnake(player,now);
   if(food.length<FOOD_TARGET) spawnFood(FOOD_TARGET-food.length);
+  maintainAmbient();   // 环境站随可吃豆子一起补充
   // 每 FOOD_REBALANCE 拍做一次分区再平衡：尸体豆堆在一起时会被摊开
   if(tickCount%FOOD_REBALANCE===0) rebalanceFood();
   MODE.onTick();   // 模式模块每拍附加逻辑（地铁版=保证「下一站」在地图上）
@@ -3175,6 +3248,25 @@ function drawMetroFood(f,FX,FY,pulse){
     ctx.fillStyle="rgba(255,255,255,.98)"; ctx.fillText(lb, FX, FY-pr-CELL*0.08);
   }
 }
+/* 环境站：非可吃，纯展示。淡色空心圈（换乘枢纽略大）+ 小号半透明站名，
+   和「可吃」的实心白票根明显区分，提示玩家「这站看得见、但当前线吃不到」。 */
+function drawAmbient(f,FX,FY,pulse){
+  var isHub=!!f.transfer;
+  var r=CELL*(isHub?0.30:0.22);
+  ctx.globalAlpha=0.46;
+  ctx.strokeStyle=f.color||"rgba(80,80,90,.6)";
+  ctx.lineWidth=Math.max(1.3,CELL*0.06);
+  ctx.beginPath(); ctx.arc(FX,FY,r,0,6.2832); ctx.stroke();
+  ctx.globalAlpha=1;
+  if(f.name){
+    var nm=f.name;
+    var fs2=Math.max(CELL*0.15, Math.min(CELL*0.32, Math.floor(CELL*0.60/nm.length)));
+    ctx.font=fs2+"px 'STKaiti','KaiTi','楷体',sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=isHub?"rgba(150,108,28,.55)":"rgba(92,92,102,.42)";
+    ctx.fillText(nm,FX,FY);
+  }
+}
 /* 文字线模块：食物 = 发光豆子（里面是字） */
 function drawTextFood(f,FX,FY,pulse){
   var r=(f.value>1?CELL*0.44:CELL*0.32);
@@ -3229,9 +3321,11 @@ function drawMetroHeadLabel(H,sn){
   ctx.lineWidth=2.4; ctx.strokeStyle="rgba(255,255,255,.95)"; ctx.strokeText(sn.body[0].name, H.x, H.y-CELL*0.86);
   ctx.fillStyle="rgba(28,28,34,.98)"; ctx.fillText(sn.body[0].name, H.x, H.y-CELL*0.86);
 }
-/* 地铁线模块：靠近换乘枢纽时底部提示「可换哪几条线」 */
+/* 地铁线模块：靠近换乘枢纽时底部提示「可换哪几条线」。
+   新规则：换乘只在「整条线吃完」后才解锁，所以本线没通时连提示都不显示，避免误导。 */
 function drawTransferHint(S,SH){
   if(!(player && player.alive && player.body[0])) return;
+  if(!lineComplete(player)) return;
   var ph=player.body[0], hub=null, i;
   for(i=0;i<food.length;i++){
     var f=food[i];
@@ -3263,6 +3357,12 @@ function draw(a){
     var f=food[i], FX=sx(f.x), FY=sy(f.y);
     if(FX<-CELL||FY<-CELL||FX>S+CELL||FY>SH+CELL) continue;
     MODE.drawFood(f,FX,FY,pulse);   // 模式模块负责画这个食物
+  }
+  // 环境站：看得见、吃不到的全城其他车站（淡色空心圈 + 站名），玩家自己找换乘站
+  for(i=0;i<ambient.length;i++){
+    var af=ambient[i], AFX=sx(af.x), AFY=sy(af.y);
+    if(AFX<-CELL||AFY<-CELL||AFX>S+CELL||AFY>SH+CELL) continue;
+    drawAmbient(af,AFX,AFY,pulse);
   }
   // 蛇
   for(i=0;i<snakes.length;i++){
@@ -3822,6 +3922,7 @@ function openCityPicker(){
   document.getElementById("linePicker").classList.remove("hidden");
 }
 document.getElementById("switchLineBtn").addEventListener("click",openLinePicker);
+document.getElementById("trBtn").addEventListener("click",function(){ if(player&&lineComplete(player)&&!transferPaused) openCityTransfer(); });
 document.getElementById("switchCityBtn").addEventListener("click",openCityPicker);
 document.getElementById("linePickerClose").addEventListener("click",function(){ document.getElementById("linePicker").classList.add("hidden"); });
 
