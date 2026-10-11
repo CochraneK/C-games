@@ -39,7 +39,7 @@ function acceptRoomState(d){
  return true;
 }
 function readyToggle(){
- if(mode==='practice'||roomPhase!=='lobby'||!conn?.open)return;
+ if(mode==='practice'||roomPhase!=='lobby'||(mode==='guest'&&!conn?.open))return;
  const seat=selfSeat();
  if(mode==='guest'){
   seatReady[seat]=!seatReady[seat];
@@ -77,7 +77,8 @@ function renderLobby(){
  $('seatPeer').classList.toggle('occupied',connected);
  $('seatSelf').classList.toggle('occupied',true);
  $('lobbyGame').textContent=gameKind==='pan'?'潘神心脏病':'德国心脏病';
- const canReady=connected;
+ $('lobbyCode').textContent=room||'创建中…';
+ const canReady=connected||mode==='host';
  $('readyButton').disabled=!canReady;
  $('readyButton').textContent=self?'取消准备':'我准备好了';
  $('startButton').classList.toggle('hidden',mode!=='host');
@@ -327,7 +328,7 @@ function attachConnection(c){
   if(c!==conn){c.close();return;}
   retryCount=0;
   if(mode==='host'){
-    setReady(true);seatReady=[false,false];roomPhase='lobby';resetGame();
+    setReady(true);seatReady[1]=false;roomPhase='lobby';resetGame();
     status('对方已加入 · 等待准备','live');
     send({type:'welcome',kind:gameKind,state:snapshot(),...roomDetails()});
     broadcastRoom();toast('朋友已经入座！双方准备后开始');
@@ -493,6 +494,7 @@ dom.join.addEventListener('click',()=>{
 });
 dom.roomInput.addEventListener('keydown',e=>{if(e.key==='Enter')dom.join.click();});
 dom.copy.addEventListener('click',copyInvite);
+$('lobbyCopyButton').addEventListener('click',copyInvite);
 dom.flip.addEventListener('click',doFlip);
 dom.bell.addEventListener('click',doBell);
 dom.restart.addEventListener('click',restart);
