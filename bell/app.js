@@ -34,6 +34,7 @@ function apply(next){game=next;view=snapshot();render();broadcast();scheduleBot(
 function updatePanClock(){
  const box=$('panClock');
  if(!box||gameKind!=='pan')return;
+ if(mode==='host'&&!started){box.textContent='等待加入';return;}
  const remaining=view?.deadline&&view.phase==='playing'?Math.max(0,view.deadline-Date.now()):0;
  const sec=Math.ceil(remaining/1000);
  box.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
@@ -256,7 +257,7 @@ function attachConnection(c){
   if(c!==conn){c.close();return;}
   retryCount=0;
   if(mode==='host'){
-    setReady(true);status('双方已连接','live');send({type:'welcome',kind:gameKind,state:snapshot()});toast('对方到啦！现在可以翻牌了');
+    setReady(true);if(gameKind==='pan'&&game?.revision===0)resetGame();status('双方已连接','live');send({type:'welcome',kind:gameKind,state:snapshot()});toast('对方到啦！现在可以翻牌了');
     if(mic&&voiceEnabled)send({type:'voice-ready'});
   }else{
     status('已经连上房主','live');send({type:'hello'});
@@ -399,7 +400,7 @@ $('tabClassic').addEventListener('click',()=>requestGame('classic'));
 $('tabPan').addEventListener('click',()=>requestGame('pan'));
 setInterval(()=>{
  if(gameKind!=='pan'||dom.gameArea.classList.contains('hidden'))return;
- if((mode==='host'||mode==='practice')&&game?.phase==='playing'){
+ if((mode==='practice'||(mode==='host'&&started))&&game?.phase==='playing'){
   const result=window.PanCore.finish(game);
   if(result.ok){pending=null;apply(result.state);}
  }
