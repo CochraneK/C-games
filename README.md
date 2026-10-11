@@ -1,4 +1,40 @@
-# 贪吃蛇合集 · Snake Games
+# C-games · 轻量网页游戏合集
+
+> **范围已冻结为两个一级游戏：Snake 与 Bell。** 不合并 HaoMi、persona-test、AI-Ques 或其他项目。
+>
+> GitHub 仓库现名 **`CochraneK/C-games`**（2026-10-11 已完成重命名）。Pages 已自动运行并出现成功构建记录；仍需在实际浏览器中检查访问与跨设备语音。
+
+> Bell 已新增 [2–8 人多人房间](bell/multi/)：每位玩家填写昵称、准备状态同步，手机可玩；原双人房间保留。
+
+## 现在的两个入口
+
+| 游戏 | 入口 | 内容 |
+| --- | --- | --- |
+| **Snake** | [`snake/`](snake/) | 苏络、77、北京地铁、南京地铁：四种贪吃蛇玩法（引擎仍保留根目录 `play.html`，避免改动旧存档与依赖） |
+| **Bell** | [`bell/`](bell/) | 德国心脏病 + 自创潘神心脏病，双人房间与可选 WebRTC 语音、单人练习 |
+
+**项目站点：** https://cochranek.github.io/C-games/ （请使用新的 URL）
+
+### 站点导航和兼容
+
+```text
+C-games/
+├── index.html           # 只显示 Snake、Bell 两个一级入口
+├── snake/index.html     # 旧版本选择页迁至此处，四个主题独立选择
+├── play.html            # Snake 引擎仍在根目录；旧直链可在仓库未改名前继续使用
+├── bell/                # Bell 两种心脏病玩法，游戏内切换
+└── README.md            # 项目说明、原贪吃蛇技术资料
+```
+
+注意：GitHub 仓库更名之后，**旧的 GitHub Pages 路径不保证自动重定向**；曾经分享的 `/snake-games/...` 网页链接需要单独处理。GitHub 代码仓库重定向与 Pages 站点重定向不是一回事。当前前端链接已改为相对路径，以兼容两种仓库路径。
+
+## 游戏测试和联机状态
+
+- Bell 前端通过 **PeerJS / WebRTC** 同步房间和牌局，GitHub Pages 只负责静态网页托管；麦克风双方自主开启，不录音。
+- Bell 有两人互相准备与房主开局的候场流程；潘神模式的计时从房主开局开始。
+- `.github/workflows/bell-tests.yml` 自动测试双人消息同步与玩法规则，但真实跨网语音仍须用户验证。
+
+## Snake 引擎与既有玩法文档
 
 同一个开放世界贪吃蛇**引擎**，多个「蛇」版本。当前内置：
 
@@ -34,7 +70,7 @@
 
 ## 怎么玩 / 链接
 
-- 版本列表（发给别人用这个）：`index.html` → https://cochranek.github.io/snake-games/
+- 版本列表（Snake 的四种主题）：[`snake/index.html`](snake/index.html)；C-games 首页：[`index.html`](index.html)
 - 直接进某个版本：
   - 苏络：`play.html?theme=su`
   - 77：`play.html?theme=77`
