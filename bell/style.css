@@ -90,3 +90,15 @@
  .lobby-actions{grid-template-columns:1fr}
  .lobby-actions .start-button{grid-column:auto}
 }
+
+
+.lobby-invite{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #e5dfd3;background:#f9f6ee;padding:11px 13px;margin:0 0 17px;border-radius:12px}
+.invite-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.invite-copy>span{color:#8c897d;font-size:10px}
+.invite-copy strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px;letter-spacing:2px;color:#375b4d;user-select:all}
+.lobby-invite .little-button{background:#fffdfa;white-space:nowrap;min-height:35px;font-size:11px}
+@media(max-width:680px){
+ .lobby-invite{padding:10px;gap:6px}
+ .invite-copy strong{font-size:12px;letter-spacing:1px}
+ .lobby-invite .little-button{font-size:10px;padding:8px}
+}
