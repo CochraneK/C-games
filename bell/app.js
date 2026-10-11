@@ -13,6 +13,7 @@ const dom={
   voice:$('voiceButton'),voiceText:$('voiceText'),micIcon:$('micIcon'),restart:$('restartButton'),toast:$('toast'),audio:$('remoteAudio')
 };
 let mode='welcome', room='', peer=null,conn=null,game=null,view=null,started=false,pending=null;
+let roomPhase='lobby',seatReady=[false,false],remoteVoiceEnabled=false;
 let mic=null,call=null,remoteReady=false,voiceEnabled=false,voiceConnected=false;
 let practiceBotTimer=null,botBellTimer=null,lastGuestBell=0,lastLocalBell=0,retryCount=0;
 let toastTimer=0,audioContext=null,openingVoice=false;
@@ -23,18 +24,84 @@ function randomRoom(){const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';const bytes=
 function urlOf(code,join){const u=new URL(window.location.href);u.search='';u.hash='';u.searchParams.set('room',code);if(join)u.searchParams.set('join','1');return u.toString();}
 function showGame(){dom.welcome.classList.add('hidden');dom.gameArea.classList.remove('hidden');render();}
 function setReady(ready){started=ready;render();}
-function canAct(){return mode==='practice'||(mode==='host'&&started&&conn&&conn.open)||(mode==='guest'&&conn&&conn.open&&started);}
+function canAct(){return mode==='practice'||(roomPhase==='playing'&&started&&conn?.open);}
 function selfSeat(){return mode==='guest'?1:0;}
 function share(){return room?urlOf(room,true):window.location.href;}
 function send(data){if(conn&&conn.open){try{conn.send(data);return true;}catch(e){toast('发送失败，请检查连接');}}return false;}
 function snapshot(){return game?C.snapshot(game):null;}
-function broadcast(){if(mode==='host'&&game)send({type:'state',kind:gameKind,state:snapshot()});}
+function roomDetails(){return {phase:roomPhase,ready:seatReady.slice(),kind:gameKind};}
+function broadcastRoom(){if(mode==='host')send({type:'room-status',...roomDetails()});}
+function broadcast(){if(mode==='host'&&game)send({type:'state',kind:gameKind,state:snapshot(),...roomDetails()});}
+function acceptRoomState(d){
+ if(!d||!['lobby','playing'].includes(d.phase)||!Array.isArray(d.ready)||d.ready.length!==2||
+   !d.ready.every(v=>typeof v==='boolean'))return false;
+ roomPhase=d.phase;seatReady=d.ready.slice();
+ return true;
+}
+function readyToggle(){
+ if(mode==='practice'||roomPhase!=='lobby'||!conn?.open)return;
+ const seat=selfSeat();
+ if(mode==='guest'){
+  seatReady[seat]=!seatReady[seat];
+  if(!send({type:'ready',value:seatReady[seat]})){seatReady[seat]=!seatReady[seat];}
+ }else{
+  seatReady[0]=!seatReady[0];broadcastRoom();
+ }
+ render();
+}
+function beginRound(){
+ if(mode!=='host'||!conn?.open||roomPhase!=='lobby'||!seatReady.every(Boolean)){
+  toast('需要两个人都已连接并准备好');return;
+ }
+ roomPhase='playing';resetGame();broadcastRoom();
+ status('双方正在游戏中','live');toast('双方准备完成，开始！');
+}
+function returnToLobby(){
+ roomPhase='lobby';seatReady=[false,false];pending=null;
+ if(mode==='host'){resetGame();broadcastRoom();}
+ render();
+}
+function renderLobby(){
+ const lobby=$('roomLobby');
+ const showing=mode!=='practice'&&mode!=='welcome'&&roomPhase==='lobby';
+ lobby.classList.toggle('hidden',!showing);
+ document.body.classList.toggle('in-lobby',showing);
+ const connected=Boolean(conn?.open);
+ const seat=selfSeat(),self=seatReady[seat],other=seatReady[1-seat];
+ $('selfPresence').textContent=connected?'已连接':'已入座 · 等待连接';
+ $('peerPresence').textContent=connected?'已连线 · 在线':'等待朋友加入…';
+ $('selfReady').textContent=self?'✓ 已准备':'未准备';
+ $('peerReady').textContent=!connected?'未入座':other?'✓ 已准备':'未准备';
+ $('selfReady').classList.toggle('ready',self);
+ $('peerReady').classList.toggle('ready',connected&&other);
+ $('seatPeer').classList.toggle('occupied',connected);
+ $('seatSelf').classList.toggle('occupied',true);
+ $('lobbyGame').textContent=gameKind==='pan'?'潘神心脏病':'德国心脏病';
+ const canReady=connected;
+ $('readyButton').disabled=!canReady;
+ $('readyButton').textContent=self?'取消准备':'我准备好了';
+ $('startButton').classList.toggle('hidden',mode!=='host');
+ const both=connected&&seatReady.every(Boolean);
+ $('startButton').disabled=!both;
+ $('startButton').textContent=both?'两个人都准备好了 · 开始！':'等待双方准备';
+ $('lobbyMessage').textContent=!connected?'房间已留好位置，复制邀请链接等朋友进入。':
+   both?'两个人都准备好了！'+(mode==='host'?'由你按下开始。':'等待房主开始。'):
+   self?(other?'双方已准备':'你已准备，等对方准备就能玩。'):
+   other?'对方已准备，轮到你啦。':'两个人都到啦，先点「我准备好了」。';
+ $('lobbyNote').textContent=mode==='host'?
+   '你是房主。双方准备后由你开始；切换玩法会重新准备。':
+   '你是访客。双方准备后，房主会开始游戏。';
+ $('lobbyVoiceButton').disabled=mode==='practice';
+ $('lobbyMicIcon').textContent=dom.micIcon.textContent;
+ $('lobbyVoiceText').textContent=dom.voiceText.textContent;
+}
+
 function apply(next){game=next;view=snapshot();render();broadcast();scheduleBot();}
 
 function updatePanClock(){
  const box=$('panClock');
  if(!box||gameKind!=='pan')return;
- if(mode==='host'&&!started){box.textContent='等待加入';return;}
+ if(mode==='host'&&roomPhase!=='playing'){box.textContent='等待开局';return;}
  const remaining=view?.deadline&&view.phase==='playing'?Math.max(0,view.deadline-Date.now()):0;
  const sec=Math.ceil(remaining/1000);
  box.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
@@ -44,7 +111,8 @@ function selectGame(kind,fromRemote=false){
  gameKind=kind; C=gameKind==='pan'?window.PanCore:window.BellCore;
  pending=null;clearTimeout(practiceBotTimer);clearTimeout(botBellTimer);
  if(fromRemote){game=null;view=null;render();return;}
- resetGame();
+ if(mode!=='practice'){roomPhase='lobby';seatReady=[false,false];}
+ resetGame();broadcastRoom();
  toast(kind==='pan'?'潘神心脏病 · 双人计时赛开始':'切换回德国心脏病');
 }
 function requestGame(kind){
@@ -63,7 +131,8 @@ function render(){
  $('tabPan').classList.toggle('selected',pan);
  $('tabClassic').setAttribute('aria-pressed',String(!pan));
  $('tabPan').setAttribute('aria-pressed',String(pan));
- $('panSummary').classList.toggle('hidden',!pan);
+ $('panSummary').classList.toggle('hidden',!pan||(mode!=='practice'&&roomPhase==='lobby'));
+ renderLobby();
  $('gameTitle').innerHTML=pan?'潘神心脏病<span class="sparkle">♠</span>':'叮！一起玩<span class="sparkle">✳</span>';
  $('gameLead').textContent=pan?'逢 7、整 7、J Q K 和大小王，快一步拍铃！':'看见恰好五个同种水果，就先一步按响铃铛。';
  $('gameHint').textContent=pan?'A=1，数字牌相加逢 7 的倍数可拍；任一张是 7、J、Q、K 或王也可拍。空格抢铃，回车翻牌。':'轮到你时点“翻一张牌”或按 Enter。谁都可以随时抢铃。';
@@ -120,6 +189,7 @@ function render(){
  dom.flip.disabled=!canAct()||ended||!hasTurn||!!pending;
  dom.bell.disabled=!canAct()||ended||!!pending?.attempts.has(seat);
  dom.restart.disabled=mode==='guest'?!Boolean(conn&&conn.open):mode==='host'?!Boolean(conn&&conn.open):mode!=='practice';
+ dom.restart.textContent=mode==='practice'?'重新开局':s?.phase==='ended'?'再来一局':'回到准备房间';
  dom.flip.innerHTML=ended?'本局已结束':hasTurn?'翻一张牌 <span>↗</span>':mode==='practice'?'等对手翻牌':'等待对方翻牌';
  $('bellCaption').textContent=pending?'比拼反应中…':pan?'抢拍 · 空格':'抢铃 · 空格';
  if(!canAct()&&!ended){dom.flip.disabled=true;dom.bell.disabled=true;}
@@ -189,7 +259,7 @@ function resetGame(){
  game=C.create();view=snapshot();render();broadcast();scheduleBot();
 }
 function startPractice(){
- mode='practice';room='';history.replaceState(null,'',location.pathname);
+ roomPhase='playing';mode='practice';room='';history.replaceState(null,'',location.pathname);
  status('单人练习 · 随时可以重新开始','live');
  showGame();setReady(true);resetGame();toast('练习模式：你和一位电脑对手');
  dom.copy.classList.add('hidden');dom.voice.disabled=true;dom.voiceText.textContent='语音仅限联机';
@@ -257,7 +327,11 @@ function attachConnection(c){
   if(c!==conn){c.close();return;}
   retryCount=0;
   if(mode==='host'){
-    setReady(true);if(gameKind==='pan'&&game?.revision===0)resetGame();status('双方已连接','live');send({type:'welcome',kind:gameKind,state:snapshot()});toast('对方到啦！现在可以翻牌了');
+    setReady(true);seatReady=[false,false];roomPhase='lobby';resetGame();
+    status('对方已加入 · 等待准备','live');
+    send({type:'welcome',kind:gameKind,state:snapshot(),...roomDetails()});
+    broadcastRoom();toast('朋友已经入座！双方准备后开始');
+
     if(mic&&voiceEnabled)send({type:'voice-ready'});
   }else{
     status('已经连上房主','live');send({type:'hello'});
@@ -271,8 +345,12 @@ function attachConnection(c){
   conn=null;remoteReady=false;voiceConnected=false;
   if(call){call.close();call=null;}
   setReady(false);
-  if(mode==='host')status('对方离线 · 等待重连','off');
+  if(mode==='host'){
+    roomPhase='lobby';seatReady=[false,false];
+    status('对方离线 · 等待重连','off');
+  }
   if(mode==='guest'){
+   roomPhase='lobby';seatReady=[false,false];
    status('与房主断开，尝试重连…','off');
    if(++retryCount<=3)setTimeout(()=>{if(mode==='guest'&&peer&&!conn&&peer.open)connectHost();},1200*retryCount);
   }
@@ -282,7 +360,13 @@ function attachConnection(c){
 function onData(data){
  if(!data||typeof data!=='object'||typeof data.type!=='string')return;
  if(mode==='host'){
-  if(data.type==='hello')send({type:'welcome',kind:gameKind,state:snapshot()});
+  if(data.type==='hello'){
+   send({type:'welcome',kind:gameKind,state:snapshot(),...roomDetails()});
+   broadcastRoom();
+  }
+  if(data.type==='ready'&&roomPhase==='lobby'&&typeof data.value==='boolean'){
+   seatReady[1]=data.value;broadcastRoom();render();
+  }
   if(data.type==='flip')handleFlip(1);
   if(data.type==='bell')attemptBell(1);
   if(data.type==='switch-request'&&['classic','pan'].includes(data.kind)&&data.kind!==gameKind){
@@ -290,20 +374,34 @@ function onData(data){
     else send({type:'notice',text:'房主暂时没有切换玩法'});
   }
   if(data.type==='reset-request'){
-    if(window.confirm('对方想重新开始一局。要同意吗？')){resetGame();toast('已经重新开始');}else send({type:'notice',text:'房主暂时没有重新开局'});
+    if(window.confirm('对方想返回准备房间，重新开始一局。要同意吗？')){
+      returnToLobby();toast('已回到准备房间');
+    }else send({type:'notice',text:'房主暂时没有重新开局'});
   }
  }else if(mode==='guest'){
+  if(data.type==='room-status'){
+   if(['classic','pan'].includes(data.kind)&&data.kind!==gameKind)selectGame(data.kind,true);
+   if(acceptRoomState(data))render();
+  }
   if((data.type==='welcome'||data.type==='state')&&validSnapshot(data.state)){
     if(['classic','pan'].includes(data.kind)&&data.kind!==gameKind)selectGame(data.kind,true);
-    view=data.state;setReady(true);status('双方已连接','live');render();
-    if(data.type==='welcome')toast('连接成功，准备抢铃吧');
+    acceptRoomState(data);view=data.state;setReady(true);
+    status(roomPhase==='playing'?'双方正在游戏中':'双方已入座 · 等待准备','live');
+    render();
+    if(data.type==='welcome')toast('你已经进入房间，准备好就可以开始啦');
     if(data.type==='state'&&view?.last?.includes('抢铃成功'))playBell();
   }
   if(data.type==='busy'){status('房间已经满了','off');toast('这个房间已有两位玩家');conn?.close();}
   if(data.type==='notice'&&typeof data.text==='string')toast(data.text.slice(0,90));
  }
- if(data.type==='voice-ready'){remoteReady=true;if(mode==='host')maybeCall();}
- if(data.type==='voice-off'){remoteReady=false;voiceConnected=false;updateVoiceUI();if(call){call.close();call=null;}}
+ if(data.type==='voice-ready'){
+  remoteReady=true;remoteVoiceEnabled=true;if(mode==='host')maybeCall();
+  updateVoiceUI();renderLobby();
+ }
+ if(data.type==='voice-status'&&typeof data.enabled==='boolean'){
+  remoteVoiceEnabled=data.enabled;renderLobby();
+ }
+ if(data.type==='voice-off'){remoteReady=false;remoteVoiceEnabled=false;voiceConnected=false;updateVoiceUI();renderLobby();if(call){call.close();call=null;}}
 }
 function validSnapshot(s){
  return s&&typeof s==='object'&&['playing','ended'].includes(s.phase)&&[0,1].includes(s.turn)&&
@@ -317,7 +415,7 @@ function connectRoom(asHost,code){
  mode=asHost?'host':'guest';
  history.replaceState(null,'',urlOf(room,!asHost));
  showGame();
- if(asHost){resetGame();status('创建房间中…');}else status('正在加入房间…');
+ if(asHost){roomPhase='lobby';seatReady=[false,false];resetGame();status('创建房间中…');}else status('正在加入房间…');
  initPeer();
 }
 function bindCall(c){
@@ -334,10 +432,11 @@ function maybeCall(){
 }
 function updateVoiceUI(){
  if(mode==='practice')return;
- if(!mic){dom.micIcon.textContent='♩';dom.voiceText.textContent='开启语音';return;}
- if(!voiceEnabled){dom.micIcon.textContent='⌁';dom.voiceText.textContent='麦克风已静音';return;}
+ if(!mic){dom.micIcon.textContent='♩';dom.voiceText.textContent='开启语音';renderLobby();return;}
+ if(!voiceEnabled){dom.micIcon.textContent='⌁';dom.voiceText.textContent='麦克风已静音';renderLobby();return;}
  dom.micIcon.textContent=voiceConnected?'●':'◌';
  dom.voiceText.textContent=voiceConnected?'语音已连接':remoteReady?'正在连接语音':'等待对方开启语音';
+ renderLobby();
 }
 async function toggleVoice(){
  if(mode==='practice'){toast('单人模式没有语音');return;}
@@ -345,6 +444,7 @@ async function toggleVoice(){
  if(mic){
   voiceEnabled=!voiceEnabled;
   mic.getAudioTracks().forEach(track=>track.enabled=voiceEnabled);
+  send({type:'voice-status',enabled:voiceEnabled});
   updateVoiceUI();
   toast(voiceEnabled?'麦克风已打开':'麦克风已静音');
   return;
@@ -353,7 +453,7 @@ async function toggleVoice(){
  openingVoice=true;dom.voice.disabled=true;
  try{
    mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
-   voiceEnabled=true;send({type:'voice-ready'});updateVoiceUI();
+   voiceEnabled=true;send({type:'voice-ready'});send({type:'voice-status',enabled:true});updateVoiceUI();
    if(mode==='host')maybeCall();
    toast('麦克风已就绪；双方都点击开启语音后就能通话');
  }catch(e){toast(e?.name==='NotAllowedError'?'未获得麦克风权限，请在浏览器地址栏允许麦克风':'麦克风开启失败：'+(e?.message||''));}
@@ -369,8 +469,9 @@ function doBell(){
  handleBell(selfSeat());
 }
 function restart(){
- if(mode==='practice'||mode==='host'){resetGame();toast('新的一局，开始啦！');}
- else send({type:'reset-request'});
+ if(mode==='practice'){resetGame();toast('新的一局，开始啦！');}
+ else if(mode==='host'){returnToLobby();toast('回到准备房间，双方需要重新准备');}
+ else {send({type:'reset-request'});toast('已请求返回准备房间');}
 }
 async function copyInvite(){
  const link=share();
@@ -396,11 +497,14 @@ dom.flip.addEventListener('click',doFlip);
 dom.bell.addEventListener('click',doBell);
 dom.restart.addEventListener('click',restart);
 dom.voice.addEventListener('click',toggleVoice);
+$('lobbyVoiceButton').addEventListener('click',toggleVoice);
+$('readyButton').addEventListener('click',readyToggle);
+$('startButton').addEventListener('click',beginRound);
 $('tabClassic').addEventListener('click',()=>requestGame('classic'));
 $('tabPan').addEventListener('click',()=>requestGame('pan'));
 setInterval(()=>{
  if(gameKind!=='pan'||dom.gameArea.classList.contains('hidden'))return;
- if((mode==='practice'||(mode==='host'&&started))&&game?.phase==='playing'){
+ if((mode==='practice'||(mode==='host'&&started&&roomPhase==='playing'))&&game?.phase==='playing'){
   const result=window.PanCore.finish(game);
   if(result.ok){pending=null;apply(result.state);}
  }
@@ -419,7 +523,7 @@ window.addEventListener('keydown',e=>{
 });
 window.addEventListener('pagehide',()=>{if(mic)mic.getTracks().forEach(t=>t.stop());if(call)call.close();});
 // Designed for no remote-network test injection; never sends raw data via GitHub Pages.
-window.__bellDebug={getState:()=>view, getMode:()=>mode, isFive:()=>Boolean(game&&C.isFive(game))};
+window.__bellDebug={getState:()=>view, getMode:()=>mode, getRoom:()=>({phase:roomPhase,ready:seatReady.slice(),connected:Boolean(conn?.open)}),isFive:()=>Boolean(game&&C.isFive(game))};
 const params=new URLSearchParams(location.search);
 const code=(params.get('room')||'').toUpperCase();
 if(ALLOWED.test(code))connectRoom(params.get('join')!=='1',code);
