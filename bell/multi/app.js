@@ -43,7 +43,7 @@ function sendRoster(){broadcast(roomPacket());render();}
 function sendGame(){if(role!=='host')return;view=game?Core.snapshot(game):null;broadcast(roomPacket('state'));render();}
 function resetLobby(){
  phase='lobby';for(const m of members)m.ready=false;
- pending=null;if(pending?.timer)clearTimeout(pending.timer);game=null;view=null;
+ if(pending?.timer)clearTimeout(pending.timer);pending=null;game=null;view=null;
  sendRoster();
 }
 function validMembers(data){
