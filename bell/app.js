@@ -132,13 +132,29 @@ function startPractice(){
  showGame();setReady(true);resetGame();toast('练习模式：你和一位电脑对手');
  dom.copy.classList.add('hidden');dom.voice.disabled=true;dom.voiceText.textContent='语音仅限联机';
 }
-function loadPeerJS(){return new Promise((resolve,reject)=>{
- if(window.Peer){resolve();return;}
- const script=document.createElement('script');script.src='https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js';
- script.onload=()=>window.Peer?resolve():reject(new Error('PeerJS 未加载'));
- script.onerror=()=>reject(new Error('PeerJS 公共库不可达'));
- document.head.appendChild(script);
-});}
+async function loadPeerJS(){
+ if(window.Peer)return;
+ const sources=[
+  'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js',
+  'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js'
+ ];
+ for(const source of sources){
+  try{
+   await new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=source;script.async=true;
+    let finished=false;
+    const finish=(error)=>{if(finished)return;finished=true;clearTimeout(timeout);if(error){script.remove();reject(error);}else resolve();};
+    const timeout=setTimeout(()=>finish(new Error('加载超时')),8000);
+    script.onload=()=>finish(window.Peer?null:new Error('模块不可用'));
+    script.onerror=()=>finish(new Error('CDN 无法连接'));
+    document.head.appendChild(script);
+   });
+   return;
+  }catch(_){/* try another CDN */}
+ }
+ throw new Error('实时联机依赖目前不可达，请稍后重试，单人练习仍可用');
+}
+
 async function initPeer(){
  status('正在建立连接…');
  try{await loadPeerJS();}catch(e){status('联机依赖不可达','off');toast(e.message+'，可以先玩单人练习');return;}
