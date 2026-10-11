@@ -37,3 +37,56 @@
  .poker-foot{font-size:7px;letter-spacing:1px}
  .card-place.poker-joker .poker-rank{font-size:31px}
 }
+
+
+/* C-games Bell v2 · two-seat private lobby */
+.room-lobby{padding:28px 29px 24px;margin:5px 0 19px}
+.lobby-head{display:flex;justify-content:space-between;align-items:center;gap:15px}
+.lobby-head h2{font-family:Georgia,"STKaiti","KaiTi",serif;font-weight:500;font-size:25px;line-height:1.35;letter-spacing:.2px;margin:8px 0 0}
+.lobby-eyebrow{font-size:10px;letter-spacing:2.2px;color:#9c8d7f}
+.lobby-game{flex-shrink:0;font-size:11px;color:#386d57;background:#eaf3e8;border-radius:99px;padding:8px 13px}
+.lobby-steps{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:480px;margin:23px auto 19px;font-size:11px;color:#8a887e}
+.lobby-steps span:nth-child(2){color:#9c6750}
+.seat-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.seat-card{display:flex;align-items:center;gap:12px;border-radius:15px;border:1px dashed #d2d1c7;background:#f8f6ef;min-height:100px;padding:17px 13px;transition:background .18s,border-color .18s}
+.seat-card.occupied{background:#f1f6ec;border:1px solid #cadbc8}
+.seat-symbol{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#d4e6d2;color:#3b7456;font-family:Georgia,"STKaiti",serif;font-size:18px}
+.seat-symbol.peer{background:#eee6d9;color:#95745a}
+.seat-card.occupied .seat-symbol.peer{background:#e6d8c4;color:#795b3f}
+.seat-copy{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.seat-copy strong{font-size:13px;font-weight:600;color:#393c35}
+.seat-copy>span{font-size:11px;color:#81917f;line-height:1.4}
+.seat-state{flex:none;font-size:10px;color:#9c9282;border:1px solid #ddd7c9;border-radius:99px;padding:5px 9px;white-space:nowrap;background:#fffcf7}
+.seat-state.ready{color:#34785e;border-color:#b3d9bd;background:#e4f5e9}
+.lobby-message{text-align:center;font-size:14px;font-weight:500;line-height:1.6;color:#5b6255;margin:24px 0 18px;min-height:24px}
+.lobby-actions{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:9px}
+.lobby-actions button{min-width:122px;min-height:46px}
+.lobby-voice{font-size:12px;min-width:128px!important;color:#576253}
+.lobby-note{text-align:center;color:#9c9a90;font-size:10px;line-height:1.7;margin:14px 0 0}
+.in-lobby .players,.in-lobby .tabletop,.in-lobby .game-message,.in-lobby .bottom-controls,.in-lobby .hint,.in-lobby .connection-note{display:none}
+.in-lobby .footer{margin-top:27px}
+@media(max-width:680px){
+ .room-lobby{padding:20px 13px 19px;margin-bottom:13px}
+ .lobby-head{align-items:flex-start}
+ .lobby-head h2{font-size:20px;margin-top:7px}
+ .lobby-game{font-size:10px;padding:6px 9px}
+ .lobby-eyebrow{font-size:9px}
+ .lobby-steps{margin:20px 5px 16px;font-size:10px;gap:4px}
+ .seat-grid{gap:8px}
+ .seat-card{min-height:132px;flex-direction:column;align-items:flex-start;gap:9px;padding:12px 10px;position:relative}
+ .seat-symbol{width:34px;height:34px;font-size:14px}
+ .seat-copy{gap:4px}
+ .seat-copy strong{font-size:12px}
+ .seat-copy>span{font-size:10px}
+ .seat-state{position:absolute;right:8px;top:17px;font-size:10px;padding:4px 6px}
+ .lobby-message{font-size:13px;margin:20px 0 14px}
+ .lobby-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .lobby-actions button{width:100%;min-width:0!important;min-height:47px;padding:11px 8px;font-size:12px}
+ .lobby-actions .start-button{grid-column:1/-1}
+ .lobby-note{font-size:10px}
+}
+@media(max-width:345px){
+ .seat-state{position:static}
+ .lobby-actions{grid-template-columns:1fr}
+ .lobby-actions .start-button{grid-column:auto}
+}
