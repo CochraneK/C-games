@@ -19,10 +19,10 @@ class Conn extends Events{
  close(){if(!this.open)return;this.open=false;this.emit('close');if(this.twin.open){this.twin.open=false;this.twin.emit('close');}}
 }
 class FakePeer extends Events{
- constructor(id){super();this.id=typeof id==='string'?id:'guest-'+(++sequence);this.open=false;this.destroyed=false;
+ constructor(id){super();this.id=typeof id==='string'?id:'guest-'+(++sequence);this.open=false;this.destroyed=false;this.connections=[];
  network.set(this.id,this);later(()=>{this.open=true;this.emit('open');});}
  connect(id){const remote=network.get(id);assert.ok(remote,'host exists');const a=new Conn(id),b=new Conn(this.id);
- a.twin=b;b.twin=a;later(()=>{remote.emit('connection',b);a.open=b.open=true;b.emit('open');a.emit('open');});return a;}
+ a.twin=b;b.twin=a;this.connections.push(a);later(()=>{remote.emit('connection',b);a.open=b.open=true;b.emit('open');a.emit('open');});return a;}
  reconnect(){}call(){throw Error('voice requires real WebRTC devices; not emulated');}
 }
 function node(id){
@@ -87,13 +87,23 @@ async function tick(){for(let i=0;i<12;i++){await Promise.resolve();drain();}}
  host.$('startButton').click();
  assert.equal(host.get().view.hands.reduce((a,b)=>a+b,0),54);
  assert.ok(guests.every(g=>g.get().view.hands.length===4));
- // Disconnect while playing must return all other clients to the lobby.
- const departing=guests[2],depId=departing.get().members.find(m=>m.name==='Kai').peerId;
- const connection=network.get(depId);
- // Guest has one outbound connection; we can directly close it via captured Peer transport.
- const remote=network.get(host.get().members[0].peerId);
- // Closing from the guest side is triggered through the host-side connection map surrogate:
- // Invoke guest's Peer listener only if one is supplied, otherwise use its real host-connection tracked by fake transport.
- assert.ok(connection&&remote);
- console.log('Bell multi room checks: PASS (four nicknames, ready, turn sync, mode switch, reset, 54-card Pan).');
+ // Disconnect while playing must return everyone to the lobby.
+ const departing=guests[2];
+ const leavingId=departing.get().members.find(m=>m.name==='Kai').peerId;
+ network.get(leavingId).connections[0].close();await tick();
+ assert.equal(host.get().members.length,3,'disconnected player removed');
+ assert.equal(host.get().phase,'lobby','host returns to lobby after disconnect');
+ assert.ok(guests.slice(0,2).every(g=>g.get().phase==='lobby'),'remaining clients return to lobby');
+ assert.ok(host.get().members.every(m=>!m.ready),'readiness reset after disconnection');
+ // Create another room and fill all eight slots, then reject the ninth.
+ const eight=page('https://local.test/C-games/bell/multi/','Owner',true,8);await tick();
+ for(let k=1;k<=7;k++){
+  const newcomer=page(eight.win.location.href,'Friend'+k);
+  await tick();assert.equal(eight.get().members.length,k+1,'member joined: '+k);
+ }
+ assert.equal(eight.get().members.length,8,'eight seats occupied');
+ const overflow=page(eight.win.location.href,'TooMany');await tick();
+ assert.equal(eight.get().members.length,8,'ninth user rejected');
+ assert.equal(overflow.get().members.length,0,'rejected guest not given roster');
+ console.log('Bell multi room checks: PASS (four nicknames, ready, turn sync, mode switch, disconnect, eight-seat capacity, 54-card Pan).');
 })().catch(e=>{console.error(e);process.exitCode=1});
