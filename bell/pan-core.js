@@ -38,6 +38,11 @@
    '（'+g.scores[0]+':'+g.scores[1]+'）';
   return g;
  }
+ function eliminate(g,loser,reason){
+  g.phase='ended';g.endedBy='elimination';g.winner=1-loser;
+  g.last=reason+' · 玩家'+(g.winner===0?'一':'二')+'获胜！';
+  return g;
+ }
  function finish(input,now=Date.now()){
   if(input.phase!=='playing'||now<input.deadline)return {ok:false,reason:'尚未到结算时间'};
   const g=copy(input);outcome(g,'三分钟到，积分结算');g.revision++;return {ok:true,state:g};
@@ -74,7 +79,7 @@
     g.hands[player].push(...prize);g.piles=[[],[]];
     g.hits[player]++;g.scores[player]+=2;g.turn=player;g.round++;
     g.last='拍中了！'+name+'收走 '+prize.length+' 张牌，+2 分';
-    if(!g.hands[other].length)outcome(g,name+'收走对方最后的明牌');
+    if(!g.hands[other].length)eliminate(g,other,name+'收走对方最后的明牌');
   }else{
     // No need for a 3rd-party dispute referee in the two-player edition.
     // Prefer penalty from hand; if already empty, penalize the own face-up pile.
@@ -83,7 +88,7 @@
     if(lost){g.hands[other].push(lost);g.last=name+'拍错了，赔对方一张牌，−1 分';}
     else{g.last=name+'拍错了，没有可赔的牌，−1 分';}
     if(!g.hands[g.turn].length&&g.hands[other].length)g.turn=other;
-    if(!g.hands[player].length&&!g.piles[player].length)outcome(g,name+'已经没有可保留的牌');
+    if(!g.hands[player].length&&!g.piles[player].length)eliminate(g,player,name+'已经没有可保留的牌');
   }
   g.revision++;return {ok:true,state:g,correct};
  }
