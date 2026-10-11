@@ -2,7 +2,7 @@
 
 > **范围已冻结为两个一级游戏：Snake 与 Bell。** 不合并 HaoMi、persona-test、AI-Ques 或其他项目。
 >
-> GitHub 仓库现名 `CochraneK/snake-games`；用户指定目标名为 `CochraneK/C-games`。**仅差 GitHub Settings 中的仓库改名**，当前 GitHub 连接不能执行 Rename。改名前不要把新的 Pages URL 当成已上线链接。
+> GitHub 仓库现名 **`CochraneK/C-games`**（2026-10-11 已完成重命名）。Pages 已自动运行并出现成功构建记录；仍需在实际浏览器中检查访问与跨设备语音。
 
 ## 现在的两个入口
 
@@ -11,9 +11,7 @@
 | **Snake** | [`snake/`](snake/) | 苏络、77、北京地铁、南京地铁：四种贪吃蛇玩法（引擎仍保留根目录 `play.html`，避免改动旧存档与依赖） |
 | **Bell** | [`bell/`](bell/) | 德国心脏病 + 自创潘神心脏病，双人房间与可选 WebRTC 语音、单人练习 |
 
-**已发布站点（改名前）：** https://cochranek.github.io/snake-games/
-
-**改名后的预期站点：** `https://cochranek.github.io/C-games/`（改完后需确认 GitHub Pages 配置和发布状态）。
+**项目站点：** https://cochranek.github.io/C-games/ （请使用新的 URL）
 
 ### 站点导航和兼容
 
