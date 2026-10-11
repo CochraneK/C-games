@@ -1,97 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>贪吃蛇合集 · Snake Games</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f1e9">
+<meta name="description" content="C-games：贪吃蛇与双人心脏病。两个游戏，一个入口。">
+<title>C-games · 游戏合集</title>
 <style>
-  :root{
-    --paper:#f3eee3; --paper-2:#eae1d0; --ink:#26262a; --ink-soft:#5d5850;
-    --teal:#1f6f6b; --teal-2:#2f9b95; --gold:#d9a441; --accent:#d2542a; --line:#d8cfbd;
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;min-height:100%;}
-  body{background:radial-gradient(circle at 50% 0%,#faf6ec 0%,var(--paper) 55%,var(--paper-2) 100%);
-    color:var(--ink);font-family:"STKaiti","KaiTi","Kaiti SC","楷体",serif;
-    display:flex;flex-direction:column;align-items:center;padding:22px 12px 40px;}
-  h1{font-size:26px;letter-spacing:6px;margin:4px 0 2px;font-weight:700;}
-  .sub{font-size:12px;color:var(--ink-soft);letter-spacing:1px;margin-bottom:18px;text-align:center;line-height:1.7;}
-  .grid{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:820px;}
-  a.card{text-decoration:none;color:inherit;width:230px;background:#fff;border:1px solid var(--line);
-    border-radius:16px;padding:18px 16px;box-shadow:0 8px 20px rgba(60,50,30,.12);
-    transition:transform .08s, box-shadow .12s;display:block;}
-  a.card:active{transform:translateY(3px);box-shadow:0 4px 10px rgba(60,50,30,.12);}
-  a.card:hover{transform:translateY(-3px);}
-  .badge{display:inline-block;font-size:10px;letter-spacing:1px;padding:2px 9px;border-radius:11px;
-    color:#fff;margin-bottom:10px;}
-  .badge.text{background:linear-gradient(180deg,var(--teal-2),var(--teal));}
-  .badge.metro{background:linear-gradient(180deg,#e08a4a,#c8702f);}
-  .card h2{margin:0 0 6px;font-size:21px;letter-spacing:3px;}
-  .card p{margin:0;font-size:12px;color:var(--ink-soft);line-height:1.7;}
-  .go{margin-top:12px;font-size:12px;color:var(--teal);letter-spacing:1px;}
-  .prog{margin-top:11px;height:5px;border-radius:3px;background:rgba(31,111,107,.12);overflow:hidden;}
-  .prog i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--teal-2),var(--teal));}
-  .prog-t{margin-top:5px;font-size:11px;color:var(--ink-soft);letter-spacing:.5px;
-    font-variant-numeric:tabular-nums;font-family:"PingFang SC","Microsoft YaHei",sans-serif;}
-  .tip{margin-top:26px;font-size:11px;color:var(--ink-soft);max-width:560px;text-align:center;line-height:1.8;}
-  .tip code{background:rgba(31,111,107,.10);color:var(--teal);padding:1px 6px;border-radius:6px;}
-  .foot{margin-top:18px;font-size:11px;color:var(--ink-soft);letter-spacing:1px;}
+:root{color-scheme:light;--paper:#f4f1e9;--ink:#262e2a;--sub:#6f776f;--line:#e2e6dc;--green:#356b5a;--green-deep:#22483d;--red:#a74c45}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(ellipse at 15% 0%,#fffefa 0,var(--paper) 75%);color:var(--ink);font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:1050px;margin:auto;padding:44px 32px 40px}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.mark{display:inline-flex;align-items:center;gap:10px;font-size:12px;letter-spacing:1.5px;color:var(--green-deep);font-weight:700}
+.mark-symbol{display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:var(--green-deep);color:#f6f7ee;font-size:16px}
+.brand-note{color:#a1a59b;font-size:11px}
+.intro{margin:88px 0 39px}
+.eyebrow{font-size:12px;letter-spacing:3px;color:#758878}
+h1{font-family:Georgia,"STKaiti","KaiTi",serif;font-weight:500;letter-spacing:-2px;font-size:clamp(42px,6vw,67px);margin:14px 0 8px;line-height:1.15}
+h1 span{color:var(--green)}
+.subtitle{color:var(--sub);font-size:14px;line-height:1.9;margin:0;max-width:480px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+a.game{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:#fffdf8;text-decoration:none;color:inherit;box-shadow:0 12px 40px #233e2510;transition:transform .18s,box-shadow .18s,border-color .18s}
+a.game:hover{transform:translateY(-4px);box-shadow:0 22px 48px #233e2520;border-color:#bad0bf}
+a.game:focus-visible{outline:3px solid var(--green);outline-offset:4px}
+a.game:active{transform:translateY(0)}
+.art{height:235px;position:relative;display:flex;align-items:center;justify-content:center;isolation:isolate}
+.art.snake{background:radial-gradient(circle at 63% 37%,#e2f3dc 0,#c9e1c7 54%,#bfd8c5 100%)}
+.art.bell{background:radial-gradient(circle at 58% 33%,#fff0d9 0,#f0dec6 58%,#eacdbb 100%)}
+.art::before{content:"";position:absolute;inset:23px;border:1px solid #ffffff88;border-radius:18px;pointer-events:none}
+.art svg{max-width:75%;height:86%;filter:drop-shadow(0 13px 11px #31472d27)}
+.art .tag{position:absolute;top:20px;left:22px;border:1px solid #ffffff80;background:#ffffffa8;padding:6px 10px;border-radius:22px;font-size:11px;color:#496253;backdrop-filter:blur(3px)}
+.info{padding:23px 27px 25px}
+.title-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+h2{font-family:Georgia,"STKaiti","KaiTi",serif;font-size:29px;letter-spacing:.3px;font-weight:500;margin:0}
+.arrow{color:#54755e;font-size:20px;transition:transform .2s}
+a.game:hover .arrow{transform:translateX(5px)}
+.description{font-size:13px;line-height:1.8;color:var(--sub);margin:12px 0 17px;min-height:47px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chips span{font-size:11px;border-radius:6px;background:#f3f1e8;padding:5px 9px;color:#677568}
+footer{display:flex;justify-content:space-between;gap:15px;align-items:center;color:#929a8f;font-size:11px;border-top:1px solid #dedfd6;margin-top:70px;padding-top:23px}
+footer a{color:inherit;text-decoration:none}
+footer a:hover{text-decoration:underline}
+@media(max-width:700px){
+ main{padding:23px 16px 27px}
+ .brand-note{font-size:10px}
+ .intro{margin:61px 0 29px}
+ h1{font-size:46px}
+ .subtitle{font-size:13px}
+ .cards{grid-template-columns:1fr;gap:17px}
+ .art{height:194px}
+ .info{padding:19px 20px 21px}
+ h2{font-size:25px}
+ .description{min-height:0;margin:10px 0 15px}
+ footer{margin-top:40px}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
-  <h1>贪吃蛇合集</h1>
-  <div class="sub">选一个版本开始 · 同一个引擎，不同的「蛇」<br>文字蛇 / 地铁线，想加新版本只改一处配置</div>
-
-  <div class="grid" id="grid"></div>
-
-  <div class="tip">
-    把对应链接发给不同的人即可：<code>play.html?theme=su</code> 给苏络，<code>play.html?theme=cc</code> 给 CC……<br>
-    新增版本：在 <code>play.html</code> 的 <code>THEMES</code> 里加一项（复制现有项改 id / 文字 / 颜色），再到本页 <code>MENU</code> 加一张卡片。
-  </div>
-  <div class="foot">Snake Games · 开放世界贪吃蛇引擎</div>
-
-<script>
-/* 与 play.html 的 THEMES 对应；新增版本时同步加一条。
-   total = 全网站点数（点亮目标），bestKey 与 play.html 里的存档键一致 —— 入口页读这两个
-   就能把「玩到哪了」直接写在卡片上，不用进游戏才知道进度。 */
-const MENU = [
-  {id:"su",      label:"苏络",     kind:"text",  color:"#1f6f6b", bestKey:"suluo_best",   desc:"蛇身是「苏络苏络…」文字链"},
-  {id:"77",      label:"77",       kind:"text",  color:"#1f6f6b", bestKey:"77_best",      desc:"蛇身是「7777…」数字链"},
-  {id:"beijing", label:"北京地铁", kind:"metro", color:"#A9043B", bestKey:"beijing_best", total:410,
-   desc:"每条蛇是一条真实地铁线路（真实站名串成蛇身，按真实相邻顺序建设家园）"},
-  {id:"nanjing", label:"南京地铁", kind:"metro", color:"#009ACE", bestKey:"nanjing_best", total:266,
-   desc:"每条蛇是一条真实地铁线路（真实站名串成蛇身，按真实相邻顺序建设家园）"}
-];
-const grid=document.getElementById("grid");
-/* 读进度：点亮站卡数（snake_achieve_<id> 里的 c）+ 历史最长 */
-function progOf(m){
-  var lit=0, best=0;
-  try{
-    var o=JSON.parse(localStorage.getItem("snake_achieve_"+m.id)||"{}");
-    if(o&&o.c) lit=Object.keys(o.c).length;
-    best=parseInt(localStorage.getItem(m.bestKey)||"0",10)||0;
-  }catch(e){}
-  return {lit:lit,best:best};
-}
-/* 有进度的排前面：回来继续玩的人第一眼就看到自己那局 */
-var list=MENU.slice().sort(function(a,b){
-  var pa=progOf(a), pb=progOf(b);
-  return (pb.lit>0)-(pa.lit>0) || pb.best-pa.best;
-});
-list.forEach(function(m){
-  var a=document.createElement("a");
-  a.className="card"; a.href="play.html?theme="+m.id;
-  var badge = m.kind==="metro" ? "地铁线" : "文字蛇";
-  var p=progOf(m), prog="";
-  if(m.total) prog='<div class="prog"><i style="width:'+Math.min(100,p.lit/m.total*100)+'%"></i></div>'
-    +'<div class="prog-t">已点亮 '+p.lit+' / '+m.total+' 站'+(p.best?('　·　最长 '+p.best):'')+'</div>';
-  else if(p.best) prog='<div class="prog-t">历史最长 '+p.best+'</div>';
-  a.innerHTML = `<span class="badge ${m.kind}">${badge}</span>`
-    + `<h2 style="color:${m.color}">${m.label}</h2>`
-    + `<p>${m.desc}</p>` + prog
-    + `<div class="go">${(p.lit||p.best)?"继续游玩 →":"开始游玩 →"}</div>`;
-  grid.appendChild(a);
-});
-</script>
+<main>
+  <header class="brand"><div class="mark"><span class="mark-symbol">C</span> C-GAMES</div><div class="brand-note">Two games. One place.</div></header>
+  <section class="intro">
+    <div class="eyebrow">WELCOME TO THE TABLE</div>
+    <h1>想玩，就<span>玩一会儿。</span></h1>
+    <p class="subtitle">不必下载，不必注册。自己玩一局贪吃蛇，或者邀请朋友，一起抢铃铛。</p>
+  </section>
+  <nav class="cards" aria-label="选择游戏">
+    <a class="game" href="./snake/" aria-label="进入贪吃蛇游戏">
+      <div class="art snake">
+        <span class="tag">01 · SOLO</span>
+        <svg viewBox="0 0 420 240" role="img" aria-label="蜿蜒的绿色贪吃蛇">
+          <path d="M65 155 H112 Q132 155 132 135 V87 Q132 65 155 65 H260 Q280 65 280 88 V150 Q280 172 303 172 H341" fill="none" stroke="#779f86" stroke-width="55" stroke-linecap="round" stroke-linejoin="round" opacity=".35"/>
+          <path d="M65 155 H112 Q132 155 132 135 V87 Q132 65 155 65 H260 Q280 65 280 88 V150 Q280 172 303 172 H341" fill="none" stroke="#3b745b" stroke-width="37" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="343" cy="170" r="27" fill="#3b745b"/><circle cx="348" cy="159" r="5" fill="#fdfcf2"/><circle cx="348" cy="159" r="2.4" fill="#213629"/>
+          <path d="M365 176 L381 183 L367 187" fill="none" stroke="#d4786d" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="56" cy="71" r="9" fill="#d4a64f"/><circle cx="221" cy="187" r="9" fill="#d4a64f"/>
+          <circle cx="94" cy="58" r="4" fill="#eaf7dd"/><circle cx="327" cy="58" r="4" fill="#eaf7dd"/>
+        </svg>
+      </div>
+      <div class="info"><div class="title-row"><h2>Snake · 贪吃蛇</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">四个熟悉的版本：苏络、77、北京地铁和南京地铁。找回自己的路线，慢慢玩。</p><div class="chips"><span>单人</span><span>文字蛇</span><span>地铁探索</span></div></div>
+    </a>
+    <a class="game" href="./bell/" aria-label="进入双人心脏病游戏">
+      <div class="art bell">
+        <span class="tag">02 · TWO PLAYERS</span>
+        <svg viewBox="0 0 420 240" role="img" aria-label="扑克牌和金色铃铛">
+          <g transform="rotate(-15 136 132)"><rect x="71" y="46" width="121" height="170" rx="11" fill="#fffef8" stroke="#bdaea0" stroke-width="3"/><text x="88" y="81" font-size="28" fill="#b55350">♥</text><text x="131" y="152" font-size="66" fill="#b55350" text-anchor="middle">♥</text></g>
+          <g transform="rotate(11 255 132)"><rect x="201" y="42" width="121" height="170" rx="11" fill="#fffef8" stroke="#bdaea0" stroke-width="3"/><text x="219" y="78" font-size="28" fill="#335943">♣</text><text x="262" y="148" font-size="64" fill="#335943" text-anchor="middle">♣</text></g>
+          <ellipse cx="213" cy="202" rx="84" ry="16" fill="#806a47" opacity=".2"/>
+          <path d="M158 177 Q166 94 212 93 Q265 93 270 177 Z" fill="#dfb15e" stroke="#ab7734" stroke-width="4"/>
+          <ellipse cx="214" cy="176" rx="61" ry="12" fill="#ffe2a1" stroke="#a87833" stroke-width="3"/>
+          <rect x="205" y="75" width="17" height="22" rx="7" fill="#ae7c32"/><ellipse cx="214" cy="75" rx="18" ry="9" fill="#edc376" stroke="#a87833" stroke-width="3"/>
+          <path d="M182 157 Q179 123 204 106" stroke="#fff3cb" stroke-width="7" stroke-linecap="round" fill="none" opacity=".77"/>
+        </svg>
+      </div>
+      <div class="info"><div class="title-row"><h2>Bell · 心脏病</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">德国心脏病与潘神心脏病。打开同一个房间，面对面似的翻牌、抢铃、说话。</p><div class="chips"><span>双人联机</span><span>语音可选</span><span>单人练习</span></div></div>
+    </a>
+  </nav>
+  <footer><span>© C-games · Play for a while.</span><a href="https://github.com/CochraneK/snake-games">GitHub ↗</a></footer>
+</main>
 </body>
 </html>
