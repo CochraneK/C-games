@@ -45,6 +45,32 @@
         <button type="button" id="tabClassic" class="game-tab selected" aria-pressed="true"><span>🍓</span> 德国心脏病</button>
         <button type="button" id="tabPan" class="game-tab" aria-pressed="false"><span>♠</span> 潘神心脏病 <small>54 张扑克</small></button>
       </div>
+      <section id="roomLobby" class="room-lobby panel hidden" aria-label="双人房间候场">
+        <div class="lobby-head">
+          <div><span class="lobby-eyebrow">PRIVATE ROOM · TWO PLAYERS</span><h2>这一桌，等你们一起开局</h2></div>
+          <span class="lobby-game" id="lobbyGame">德国心脏病</span>
+        </div>
+        <div class="lobby-steps" aria-hidden="true"><span>01 · 入座</span><span>02 · 双方准备</span><span>03 · 开始</span></div>
+        <div class="seat-grid">
+          <div class="seat-card" id="seatSelf">
+            <span class="seat-symbol">你</span>
+            <div class="seat-copy"><strong>我的座位</strong><span id="selfPresence">已入座</span></div>
+            <span id="selfReady" class="seat-state">未准备</span>
+          </div>
+          <div class="seat-card" id="seatPeer">
+            <span class="seat-symbol peer">友</span>
+            <div class="seat-copy"><strong>朋友的座位</strong><span id="peerPresence">等待加入…</span></div>
+            <span id="peerReady" class="seat-state">未入座</span>
+          </div>
+        </div>
+        <p class="lobby-message" id="lobbyMessage" role="status" aria-live="polite">复制邀请链接，等朋友来坐下。</p>
+        <div class="lobby-actions">
+          <button id="readyButton" type="button" class="primary">我准备好了</button>
+          <button id="startButton" type="button" class="primary start-button hidden" disabled>双方准备后开始</button>
+          <button id="lobbyVoiceButton" type="button" class="outline lobby-voice"><span id="lobbyMicIcon">♩</span> <span id="lobbyVoiceText">开启语音</span></button>
+        </div>
+        <p class="lobby-note" id="lobbyNote">两个人都点「准备」后，由房主开始。语音可选，随时可静音。</p>
+      </section>
       <div class="pan-summary hidden" id="panSummary" aria-label="潘神双人比分">
         <div class="score-mini"><small>你</small><strong id="panYouScore">0</strong><span id="panYouHits">抢中 0 · 误拍 0</span></div>
         <div class="round-clock"><small>计时对局</small><strong id="panClock">03:00</strong><span>每局三分钟</span></div>
@@ -69,7 +95,7 @@
         <div class="right-controls"><button id="voiceButton" class="outline compact" type="button"><span id="micIcon">♩</span><span id="voiceText">开启语音</span></button><button id="restartButton" class="outline compact" type="button">重新开局</button></div>
       </div>
       <div class="hint" id="gameHint">轮到你时点“翻一张牌”或按 Enter。谁都可以随时抢铃。</div>
-      <div class="connection-note">双人对局使用浏览器间连接，轻量试玩版不保证跨网络成功；比赛结果以房主判定为准。</div>
+      <div class="connection-note">双人对局经浏览器连接；语音不会被录制。网络不佳时连接可能失败，比赛结果由房主判定。</div>
     </section>
     <footer class="footer">一张桌子 · 两个人 · 一声叮</footer>
   </main>
