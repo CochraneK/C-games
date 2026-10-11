@@ -1,0 +1,113 @@
+:root{color-scheme:light;--cream:#f4efe6;--ink:#302a26;--muted:#81776c;--red:#bb534a;--rose:#f3d5cc;--line:#dfd5c7;--green:#376957;--felt:#d7e0d4;--gold:#b78940}*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}body{background:radial-gradient(ellipse at 25% 0,#fffdf6 0%,var(--cream) 70%)}button,input{font:inherit}button{cursor:pointer;border:0}button:disabled{cursor:not-allowed;opacity:.47}a{color:inherit;text-decoration:none}.hidden{display:none!important}.page{max-width:1050px;margin:auto;padding:0 26px}.topbar{height:78px;display:flex;align-items:center;justify-content:space-between;font-size:12px}.home{color:var(--muted);padding:8px 0}.home:hover,.text-button:hover{color:var(--red)}.eyebrow{letter-spacing:2px;color:#aa9682;font-size:10px}.dot{padding:0 6px}.text-button{background:transparent;color:var(--ink);font-size:12px;padding:8px 0}.heading{text-align:center;margin:16px auto 28px}.kicker,.modal-eyebrow{font-size:11px;letter-spacing:3px;color:var(--red)}h1{font-family:Georgia,"STKaiti","KaiTi",serif;font-size:clamp(36px,5vw,54px);font-weight:500;margin:9px 0 7px;letter-spacing:3px}.sparkle{color:var(--gold);font-family:sans-serif;font-size:22px;vertical-align:top;margin-left:8px}.heading p{font-size:13px;color:var(--muted);letter-spacing:.6px}.panel{border:1px solid var(--line);box-shadow:0 15px 50px #60533b0c;background:#fffdf8;border-radius:20px}.welcome{max-width:550px;margin:32px auto 90px;padding:45px 38px 28px;text-align:center}.welcome-illustration{display:flex;gap:18px;align-items:center;justify-content:center;font-size:50px;margin-bottom:14px}.small-bell{font-size:48px;transform:rotate(-14deg);filter:drop-shadow(0 6px 5px #bb904333)}.welcome h2{font-family:Georgia,"STKaiti","KaiTi",serif;font-weight:500;font-size:27px;margin:10px}.welcome p{color:var(--muted);font-size:13px;line-height:1.9}.actions{display:flex;justify-content:center;gap:12px;margin:25px 0 22px}.primary,.outline{border-radius:12px;padding:13px 20px;font-weight:600;transition:transform .15s,background .15s,box-shadow .15s}.primary{background:var(--red);color:#fff;box-shadow:0 6px 16px #b44f4730}.primary:hover:not(:disabled){background:#a44740;transform:translateY(-1px)}.primary span{margin-left:10px}.outline{background:transparent;border:1px solid var(--line);color:var(--ink)}.outline:hover:not(:disabled){border-color:var(--gold);background:#fffbf1}.join-entry{max-width:280px;margin:22px auto;border-top:1px solid var(--line);padding-top:19px;text-align:left}.join-entry label{font-size:11px;color:var(--muted)}.join-box{display:flex;border-bottom:1px solid #cabead;align-items:center}.join-box input{min-width:0;flex:1;width:100%;padding:10px 0;border:0;background:transparent;outline:0;font-size:14px;letter-spacing:1px;text-transform:uppercase}.join-box .text-button{white-space:nowrap}.privacy-note{font-size:10px!important;color:#9c9286!important;margin-top:25px}.game-area{max-width:860px;margin:auto}.room-line{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;margin:0 0 18px}.room-left,.room-right{display:flex;align-items:center;gap:8px}.status-dot{width:8px;height:8px;border-radius:50%;background:#d1bc91;box-shadow:0 0 0 3px #d1bc9124}.status-dot.live{background:#4d9873;box-shadow:0 0 0 4px #8ad6ae3b}.status-dot.off{background:#bd5a51}.room-code{letter-spacing:1px;color:#7c6752}.little-button{border:1px solid var(--line);border-radius:99px;padding:7px 11px;background:#fffaf4;font-size:11px}.players{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:17px}.player{background:#fffaf4;border:1px solid #e9dfd1;border-radius:14px;display:flex;justify-content:space-between;align-items:center;padding:12px 17px;min-height:65px;transition:border-color .15s}.player.active{border-color:#c29f65;box-shadow:0 0 0 2px #e7d8ba4f}.player-title{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600}.avatar{display:inline-grid;place-items:center;border-radius:50%;width:30px;height:30px;font-size:13px}.avatar.a{background:#f4d5ce;color:#9a403d}.avatar.b{background:#d2e2d9;color:#34664d}.turn-indicator{font-size:10px;background:#f6eddd;padding:4px 7px;border-radius:5px;color:#916d36;display:none}.active .turn-indicator{display:inline}.card-count{font-family:Georgia,serif;font-size:23px}.card-count small{font-size:11px;font-family:inherit;font-weight:400;color:var(--muted)}.tabletop{position:relative;display:grid;grid-template-columns:minmax(110px,1fr) minmax(150px,.9fr) minmax(110px,1fr);gap:16px;align-items:center;min-height:344px;padding:40px 44px;isolation:isolate;border:1px solid #d5dfd2;border-radius:25px;overflow:hidden;background:linear-gradient(135deg,#e4ebe0,#ccd9cd)}.felt-ring{position:absolute;z-index:-1;inset:21px;border:1px solid #ffffff80;border-radius:21px}.pile-column{text-align:center;min-width:0}.pile-label{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:13px;gap:6px}.pile-label small{font-size:10px;color:#66806e}.card-place{background:#fffdf7;border:1px solid #e4ddd3;border-radius:15px;min-height:224px;width:min(100%,155px);margin:auto;box-shadow:0 8px 0 #ffffff73,0 14px 28px #38563d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#cab9a5;font-family:Georgia;font-size:48px;position:relative;transition:transform .12s}.card-place.active-card{color:var(--ink);transform:translateY(-3px)}.card-place.active-card:after{content:'';position:absolute;inset:6px;border:1px solid #e8e0d5;border-radius:11px;pointer-events:none}.fruit-grid{display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:2px;max-width:125px;font-size:34px;line-height:1.26;padding:4px}.fruit-grid.count-1{font-size:61px}.fruit-grid.count-2{font-size:50px}.fruit-grid.count-4,.fruit-grid.count-5{font-size:31px}.bell-column{display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1}.bell-button{border:0;background:transparent;width:min(100%,196px);height:auto;aspect-ratio:1;cursor:pointer;filter:drop-shadow(0 14px 11px #4d5b4138);transition:transform .06s,filter .08s}.bell-button:active,.bell-button.ring{transform:translateY(8px) scale(.96);filter:drop-shadow(0 5px 5px #4d5b4130)}.bell-button:disabled{opacity:.42}.bell-caption{font-size:11px;color:#58745e;letter-spacing:1px;margin-top:0}.game-message{font-family:Georgia,"STKaiti","KaiTi",serif;font-size:17px;text-align:center;line-height:1.6;margin:22px 0;color:#695846;min-height:28px}.bottom-controls{display:flex;align-items:center;justify-content:space-between;gap:12px}.flip-button{min-width:170px;padding:15px 25px}.right-controls{display:flex;gap:9px}.compact{padding:13px 15px;font-weight:500;font-size:12px;white-space:nowrap}.compact span+span{margin-left:5px}.hint{text-align:center;margin-top:17px;font-size:11px;color:#8b8173}.connection-note{text-align:center;margin-top:7px;font-size:10px;color:#aaa193;line-height:1.6}.footer{text-align:center;color:#b7aa9b;font-size:10px;letter-spacing:2px;margin:42px 0 28px}.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);background:#302a26;color:#fffaf1;border-radius:12px;padding:12px 18px;font-size:12px;box-shadow:0 10px 30px #1c191a33;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;max-width:90vw;text-align:center;z-index:20}.toast.show{opacity:1;transform:translate(-50%,0)}.modal{position:fixed;inset:0;background:#25221f75;display:grid;place-items:center;padding:20px;z-index:10}.modal-card{width:min(100%,480px);background:#fffaf2;padding:37px;border-radius:20px;position:relative;box-shadow:0 20px 50px #0002}.modal-card h2{font-family:Georgia,"STKaiti",serif;font-size:26px;font-weight:500}.modal-card p{line-height:1.9;font-size:13px;color:#62574d}.modal-card p.muted{font-size:11px;color:#978c81}.modal-card kbd{font-family:inherit;font-size:11px;border:1px solid #d9c7af;background:#faf3e5;border-radius:5px;padding:3px 6px}.modal-close{position:absolute;right:20px;top:17px;font-size:25px;background:transparent;color:#857b71}.modal-card .primary{margin-top:8px}button:focus-visible,input:focus-visible{outline:3px solid #c6a04b;outline-offset:3px}@media(max-width:680px){.page{padding:0 13px}.topbar{height:60px}.eyebrow{font-size:8px;letter-spacing:1px}.heading{margin:12px auto 22px}.heading p{font-size:12px}.welcome{margin:20px auto 45px;padding:34px 17px 24px}.welcome-illustration{font-size:40px}.welcome h2{font-size:23px}.actions{flex-direction:column;max-width:290px;margin:20px auto}.room-line{font-size:10px}.room-code{display:none}.players{gap:9px}.player{padding:10px;min-height:58px}.player-title{font-size:12px}.player-title .turn-indicator{display:none}.avatar{width:24px;height:24px}.card-count{font-size:20px}.tabletop{padding:24px 9px;min-height:260px;gap:4px;border-radius:18px;grid-template-columns:minmax(80px,1fr) minmax(94px,.85fr) minmax(80px,1fr)}.felt-ring{inset:8px;border-radius:12px}.pile-label{font-size:10px;justify-content:center;margin-bottom:8px}.pile-label small{display:none}.card-place{width:100%;min-height:164px;border-radius:11px}.fruit-grid{font-size:27px;max-width:95px}.fruit-grid.count-1{font-size:49px}.fruit-grid.count-2{font-size:38px}.fruit-grid.count-4,.fruit-grid.count-5{font-size:23px}.bell-button{width:130px;max-width:100%}.bell-caption{font-size:10px}.game-message{font-size:15px}.bottom-controls{align-items:stretch;flex-direction:column;gap:9px}.flip-button{width:100%}.right-controls{display:grid;grid-template-columns:1fr 1fr}.compact{padding:12px 6px}.connection-note{font-size:9px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Pan Heart — compact game picker and two-player score strip. */
+.game-tabs{display:flex;gap:8px;padding:5px;margin:0 0 16px;border:1px solid var(--line);border-radius:15px;background:#f1eade}
+.game-tab{flex:1;min-height:46px;background:transparent;border-radius:11px;font-size:13px;font-weight:500;color:#776e66;white-space:nowrap}
+.game-tab span{font-size:17px;vertical-align:middle;margin-right:5px}
+.game-tab small{font-size:10px;font-weight:400;opacity:.7;margin-left:4px}
+.game-tab.selected{background:#fffdf8;color:#352e28;box-shadow:0 3px 12px #40312112;font-weight:700}
+.game-tab:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.pan-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:15px}
+.score-mini,.round-clock{border:1px solid #e7dacb;background:#fffaf3;border-radius:13px;padding:9px 7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.score-mini small,.round-clock small{font-size:10px;color:#81766d}
+.score-mini strong,.round-clock strong{font-family:Georgia,"STKaiti",serif;font-size:25px;font-variant-numeric:tabular-nums;font-weight:500;color:#403832;line-height:1.25}
+.score-mini span,.round-clock span{font-size:10px;color:#8c8177}
+.round-clock strong{color:#ad5049}
+.pan-mode .tabletop{background:linear-gradient(140deg,#dde7db,#c8d8c6);min-height:333px}
+.card-place.poker-card{font-family:Georgia,serif;background:#fffdfa;gap:5px;box-shadow:0 8px 0 #ffffff70,0 14px 23px #30443825}
+.poker-rank{font-size:52px;line-height:1;font-weight:600;letter-spacing:-2px;color:#222c2d}
+.poker-suit{font-size:58px;line-height:1.15;color:#20292b}
+.poker-foot{font-size:9px;letter-spacing:2px;color:#aaa199}
+.card-place.poker-red .poker-rank,.card-place.poker-red .poker-suit{color:#c35050}
+.card-place.poker-joker .poker-rank{font-size:46px;letter-spacing:3px}
+.card-place.poker-joker .poker-suit{font-size:54px}
+.pan-mode .bell-button{filter:drop-shadow(0 14px 8px #4d5b4140)}
+@media(max-width:680px){
+ .game-tabs{gap:4px;margin-bottom:12px;padding:4px;border-radius:13px}
+ .game-tab{min-height:43px;padding:6px 3px;font-size:12px}
+ .game-tab span{font-size:15px;margin-right:2px}
+ .game-tab small{display:none}
+ .pan-summary{gap:5px;margin-bottom:11px}
+ .score-mini,.round-clock{padding:8px 2px;border-radius:10px}
+ .score-mini strong,.round-clock strong{font-size:22px}
+ .score-mini span,.round-clock span{font-size:9px}
+ .pan-mode .tabletop{min-height:260px}
+ .poker-rank{font-size:37px}
+ .poker-suit{font-size:42px}
+ .poker-foot{font-size:7px;letter-spacing:1px}
+ .card-place.poker-joker .poker-rank{font-size:31px}
+}
+
+
+/* C-games Bell v2 · two-seat private lobby */
+.room-lobby{padding:28px 29px 24px;margin:5px 0 19px}
+.lobby-head{display:flex;justify-content:space-between;align-items:center;gap:15px}
+.lobby-head h2{font-family:Georgia,"STKaiti","KaiTi",serif;font-weight:500;font-size:25px;line-height:1.35;letter-spacing:.2px;margin:8px 0 0}
+.lobby-eyebrow{font-size:10px;letter-spacing:2.2px;color:#9c8d7f}
+.lobby-game{flex-shrink:0;font-size:11px;color:#386d57;background:#eaf3e8;border-radius:99px;padding:8px 13px}
+.lobby-steps{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:480px;margin:23px auto 19px;font-size:11px;color:#8a887e}
+.lobby-steps span:nth-child(2){color:#9c6750}
+.seat-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.seat-card{display:flex;align-items:center;gap:12px;border-radius:15px;border:1px dashed #d2d1c7;background:#f8f6ef;min-height:100px;padding:17px 13px;transition:background .18s,border-color .18s}
+.seat-card.occupied{background:#f1f6ec;border:1px solid #cadbc8}
+.seat-symbol{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#d4e6d2;color:#3b7456;font-family:Georgia,"STKaiti",serif;font-size:18px}
+.seat-symbol.peer{background:#eee6d9;color:#95745a}
+.seat-card.occupied .seat-symbol.peer{background:#e6d8c4;color:#795b3f}
+.seat-copy{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.seat-copy strong{font-size:13px;font-weight:600;color:#393c35}
+.seat-copy>span{font-size:11px;color:#81917f;line-height:1.4}
+.seat-state{flex:none;font-size:10px;color:#9c9282;border:1px solid #ddd7c9;border-radius:99px;padding:5px 9px;white-space:nowrap;background:#fffcf7}
+.seat-state.ready{color:#34785e;border-color:#b3d9bd;background:#e4f5e9}
+.lobby-message{text-align:center;font-size:14px;font-weight:500;line-height:1.6;color:#5b6255;margin:24px 0 18px;min-height:24px}
+.lobby-actions{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:9px}
+.lobby-actions button{min-width:122px;min-height:46px}
+.lobby-voice{font-size:12px;min-width:128px!important;color:#576253}
+.lobby-note{text-align:center;color:#9c9a90;font-size:10px;line-height:1.7;margin:14px 0 0}
+.in-lobby .players,.in-lobby .tabletop,.in-lobby .game-message,.in-lobby .bottom-controls,.in-lobby .hint,.in-lobby .connection-note{display:none}
+.in-lobby .footer{margin-top:27px}
+@media(max-width:680px){
+ .room-lobby{padding:20px 13px 19px;margin-bottom:13px}
+ .lobby-head{align-items:flex-start}
+ .lobby-head h2{font-size:20px;margin-top:7px}
+ .lobby-game{font-size:10px;padding:6px 9px}
+ .lobby-eyebrow{font-size:9px}
+ .lobby-steps{margin:20px 5px 16px;font-size:10px;gap:4px}
+ .seat-grid{gap:8px}
+ .seat-card{min-height:132px;flex-direction:column;align-items:flex-start;gap:9px;padding:12px 10px;position:relative}
+ .seat-symbol{width:34px;height:34px;font-size:14px}
+ .seat-copy{gap:4px}
+ .seat-copy strong{font-size:12px}
+ .seat-copy>span{font-size:10px}
+ .seat-state{position:absolute;right:8px;top:17px;font-size:10px;padding:4px 6px}
+ .lobby-message{font-size:13px;margin:20px 0 14px}
+ .lobby-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .lobby-actions button{width:100%;min-width:0!important;min-height:47px;padding:11px 8px;font-size:12px}
+ .lobby-actions .start-button{grid-column:1/-1}
+ .lobby-note{font-size:10px}
+}
+@media(max-width:345px){
+ .seat-state{position:static}
+ .lobby-actions{grid-template-columns:1fr}
+ .lobby-actions .start-button{grid-column:auto}
+}
+
+
+.lobby-invite{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #e5dfd3;background:#f9f6ee;padding:11px 13px;margin:0 0 17px;border-radius:12px}
+.invite-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.invite-copy>span{color:#8c897d;font-size:10px}
+.invite-copy strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px;letter-spacing:2px;color:#375b4d;user-select:all}
+.lobby-invite .little-button{background:#fffdfa;white-space:nowrap;min-height:35px;font-size:11px}
+@media(max-width:680px){
+ .lobby-invite{padding:10px;gap:6px}
+ .invite-copy strong{font-size:12px;letter-spacing:1px}
+ .lobby-invite .little-button{font-size:10px;padding:8px}
+}
+
+
+/* Bell multi-room discoverability */
+.multiplayer-banner{display:flex;gap:14px;align-items:center;justify-content:space-between;margin:12px auto 0;max-width:760px;padding:16px 18px;border:1px solid #d1dfd5;background:#f0f5ed;border-radius:17px}
+.multiplayer-banner strong{font-size:15px;color:#315f4c}
+.multiplayer-banner p{color:#6e8373;font-size:11px;line-height:1.65;margin:6px 0 0}
+.multiplayer-link{background:#386a55;color:#fff!important;white-space:nowrap;border-radius:10px;padding:13px 14px;font-size:12px;font-weight:600;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.multiplayer-link:hover{background:#254f40}
+@media(max-width:680px){.multiplayer-banner{flex-direction:column;align-items:stretch;margin:4px auto 0;padding:13px 15px;gap:11px}.multiplayer-banner strong{font-size:14px}.multiplayer-link{width:100%}}

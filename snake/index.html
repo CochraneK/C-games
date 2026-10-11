@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Snake · C-games</title>
+<style>
+  :root{
+    --paper:#f3eee3; --paper-2:#eae1d0; --ink:#26262a; --ink-soft:#5d5850;
+    --teal:#1f6f6b; --teal-2:#2f9b95; --gold:#d9a441; --accent:#d2542a; --line:#d8cfbd;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;min-height:100%;}
+  body{background:radial-gradient(circle at 50% 0%,#faf6ec 0%,var(--paper) 55%,var(--paper-2) 100%);
+    color:var(--ink);font-family:"STKaiti","KaiTi","Kaiti SC","楷体",serif;
+    display:flex;flex-direction:column;align-items:center;padding:22px 12px 40px;}
+  h1{font-size:26px;letter-spacing:6px;margin:4px 0 2px;font-weight:700;}
+  .sub{font-size:12px;color:var(--ink-soft);letter-spacing:1px;margin-bottom:18px;text-align:center;line-height:1.7;}
+  .grid{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:820px;}
+  a.card{text-decoration:none;color:inherit;width:230px;background:#fff;border:1px solid var(--line);
+    border-radius:16px;padding:18px 16px;box-shadow:0 8px 20px rgba(60,50,30,.12);
+    transition:transform .08s, box-shadow .12s;display:block;}
+  a.card:active{transform:translateY(3px);box-shadow:0 4px 10px rgba(60,50,30,.12);}
+  a.card:hover{transform:translateY(-3px);}
+  .badge{display:inline-block;font-size:10px;letter-spacing:1px;padding:2px 9px;border-radius:11px;
+    color:#fff;margin-bottom:10px;}
+  .badge.text{background:linear-gradient(180deg,var(--teal-2),var(--teal));}
+  .badge.metro{background:linear-gradient(180deg,#e08a4a,#c8702f);}
+  .card h2{margin:0 0 6px;font-size:21px;letter-spacing:3px;}
+  .card p{margin:0;font-size:12px;color:var(--ink-soft);line-height:1.7;}
+  .go{margin-top:12px;font-size:12px;color:var(--teal);letter-spacing:1px;}
+  .prog{margin-top:11px;height:5px;border-radius:3px;background:rgba(31,111,107,.12);overflow:hidden;}
+  .prog i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--teal-2),var(--teal));}
+  .prog-t{margin-top:5px;font-size:11px;color:var(--ink-soft);letter-spacing:.5px;
+    font-variant-numeric:tabular-nums;font-family:"PingFang SC","Microsoft YaHei",sans-serif;}
+  .tip{margin-top:26px;font-size:11px;color:var(--ink-soft);max-width:560px;text-align:center;line-height:1.8;}
+  .tip code{background:rgba(31,111,107,.10);color:var(--teal);padding:1px 6px;border-radius:6px;}
+  .foot{margin-top:18px;font-size:11px;color:var(--ink-soft);letter-spacing:1px;}
+</style>
+</head>
+<body>
+  <div style="width:min(100%,820px);margin-bottom:16px;text-align:left;"><a href="../" style="font-family:system-ui,sans-serif;font-size:12px;color:#696357;text-decoration:none;letter-spacing:0;">← C-games · 返回游戏首页</a></div>
+  <h1>Snake · 贪吃蛇</h1>
+  <div class="sub">同一个引擎，四种玩法<br>选一个喜欢的版本，继续探索</div>
+
+  <div class="grid" id="grid">
+    <a class="card" href="../play.html?mode=ladder" style="border-color:var(--teal);">
+      <span class="badge metro">晋级赛</span>
+      <h2 style="color:var(--teal)">地铁城市晋级赛</h2>
+      <p>用真实地铁站「点亮」一座城 → 全省 → 全区（含港澳台）→ 全国 → 全洲 → 全球火车。北京 / 南京已可玩。</p>
+      <div class="go">开始晋级 →</div>
+    </a>
+  </div>
+
+  <div class="tip">
+    每个主题都可以单独分享。保留原来各个版本的进度和本地最高分。
+  </div>
+  <div class="foot">C-games / Snake · 开放世界贪吃蛇</div>
+
+<script>
+/* 与 play.html 的 THEMES 对应；新增版本时同步加一条。
+   total = 全网站点数（点亮目标），bestKey 与 play.html 里的存档键一致 —— 入口页读这两个
+   就能把「玩到哪了」直接写在卡片上，不用进游戏才知道进度。 */
+const MENU = [
+  {id:"su",      label:"苏络",     kind:"text",  color:"#1f6f6b", bestKey:"suluo_best",   desc:"蛇身是「苏络苏络…」文字链"},
+  {id:"77",      label:"77",       kind:"text",  color:"#1f6f6b", bestKey:"77_best",      desc:"蛇身是「7777…」数字链"},
+  {id:"beijing", label:"北京地铁", kind:"metro", color:"#A9043B", bestKey:"beijing_best", total:410,
+   desc:"每条蛇是一条真实地铁线路（真实站名串成蛇身，按真实相邻顺序建设家园）"},
+  {id:"nanjing", label:"南京地铁", kind:"metro", color:"#009ACE", bestKey:"nanjing_best", total:266,
+   desc:"每条蛇是一条真实地铁线路（真实站名串成蛇身，按真实相邻顺序建设家园）"}
+];
+const grid=document.getElementById("grid");
+/* 读进度：点亮站卡数（snake_achieve_<id> 里的 c）+ 历史最长 */
+function progOf(m){
+  var lit=0, best=0;
+  try{
+    var o=JSON.parse(localStorage.getItem("snake_achieve_"+m.id)||"{}");
+    if(o&&o.c) lit=Object.keys(o.c).length;
+    best=parseInt(localStorage.getItem(m.bestKey)||"0",10)||0;
+  }catch(e){}
+  return {lit:lit,best:best};
+}
+/* 有进度的排前面：回来继续玩的人第一眼就看到自己那局 */
+var list=MENU.slice().sort(function(a,b){
+  var pa=progOf(a), pb=progOf(b);
+  return (pb.lit>0)-(pa.lit>0) || pb.best-pa.best;
+});
+list.forEach(function(m){
+  var a=document.createElement("a");
+  a.className="card"; a.href="../play.html?theme="+encodeURIComponent(m.id);
+  var badge = m.kind==="metro" ? "地铁线" : "文字蛇";
+  var p=progOf(m), prog="";
+  if(m.total) prog='<div class="prog"><i style="width:'+Math.min(100,p.lit/m.total*100)+'%"></i></div>'
+    +'<div class="prog-t">已点亮 '+p.lit+' / '+m.total+' 站'+(p.best?('　·　最长 '+p.best):'')+'</div>';
+  else if(p.best) prog='<div class="prog-t">历史最长 '+p.best+'</div>';
+  a.innerHTML = `<span class="badge ${m.kind}">${badge}</span>`
+    + `<h2 style="color:${m.color}">${m.label}</h2>`
+    + `<p>${m.desc}</p>` + prog
+    + `<div class="go">${(p.lit||p.best)?"继续游玩 →":"开始游玩 →"}</div>`;
+  grid.appendChild(a);
+});
+</script>
+</body>
+</html>

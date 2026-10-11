@@ -274,6 +274,24 @@ z-index 要压过页面标题栏，否则半透明卡片会和标题文字重影
   .card-bar{position:absolute;left:0;bottom:0;height:2.5px;width:100%;background:var(--gold);
     transform-origin:left;animation:cardBar linear forwards;}
   @keyframes cardBar{from{transform:scaleX(1);}to{transform:scaleX(0);}}
+  /* 首次吃站的信息框（Phase D）：不暂停、自动收起，避免打断游戏性 */
+  #infoBox{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:64;
+    display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center;}
+  .ib{position:relative;width:min(360px,86vw);pointer-events:auto;overflow:hidden;
+    background:#fff;border:1px solid var(--line);border-left:4px solid var(--teal);
+    border-radius:12px;padding:9px 13px 11px;box-shadow:0 10px 28px rgba(60,50,30,.28);
+    animation:ibIn .24s ease-out;}
+  @keyframes ibIn{from{opacity:0;transform:translateY(-12px);}to{opacity:1;transform:none;}}
+  .ib-top{display:flex;align-items:center;gap:8px;}
+  .ib-kicker{font-size:10.5px;letter-spacing:1px;color:var(--gold);}
+  .ib-title{margin:3px 0 5px;font-size:16px;letter-spacing:2px;display:flex;align-items:center;gap:7px;}
+  .ib-dot{width:11px;height:11px;border-radius:3px;display:inline-block;flex:0 0 auto;
+    box-shadow:0 0 0 1px rgba(0,0,0,.14) inset;}
+  .ib-sec{margin-bottom:3px;font-size:11px;line-height:1.5;color:var(--ink);}
+  .ib-sec b{color:var(--teal);letter-spacing:.5px;margin-right:4px;}
+  .ib-coord{margin-top:4px;font-size:9.5px;color:#6b655c;text-align:right;border-top:1px dotted var(--line);padding-top:3px;}
+  .ib-coord .ck{color:#a9a29a;margin-right:4px;}
+  .ib-src{font-size:9px;color:#a9a29a;margin-top:3px;letter-spacing:.4px;}
   /* 站卡图鉴 */
   .gal-list{display:flex;flex-direction:column;gap:5px;max-height:46vh;overflow:auto;
     width:min(430px,92%);text-align:left;padding-right:2px;}
@@ -450,6 +468,7 @@ z-index 要压过页面标题栏，否则半透明卡片会和标题文字重影
   </div>
 
   <div id="cardLayer"></div>
+  <div id="infoBox"></div>
   <div id="trPanel">
     <div class="tr-t">在 <b id="trStation">—</b> 换乘到哪条线？<span class="tr-left">⏸ 已暂停 · 剩余 <b id="trCount">5.0s</b></span></div>
     <div class="tr-bar"><i id="trBarIn"></i></div>
@@ -510,7 +529,7 @@ const VIEW_TARGET_COLS_M=16, VIEW_TARGET_ROWS_M=20, CELL_MIN_M=22;
 const TICK=150;              // 统一节奏：玩家与对手同速
 const BOOST_MS=1200;         // 双击/连点触发的一次冲刺时长
 const DOUBLE_TAP_MS=320;     // 双击判定窗口
-const START_LEN=8;          // 玩家起步更长
+const START_LEN=4;          // 玩家起步短（Phase D：符合「生长游戏」节奏，开局别太长）
 const DEAD_ZONE=2.0;
 const CAM_LERP=0.16;
 /* —— 爽点参数：不死亡，只掉肉（保持原样）—— */
@@ -529,7 +548,7 @@ const BOOST_DROP=6;         // 长按加速：每走 6 步掉 1 节肉（肉落�
 const BOT_DECIDE=4;         // 每 4 拍才重新决策一次，其余时间直行
 const BOT_SIGHT=12;         // 只看得见 12 格内的豆子
 const BOT_MISS=0.07;        // 7% 概率乱转
-const BOT_START_LEN=5;      // 对手起步比玩家短
+const BOT_START_LEN=4;      // 对手起步也短（与玩家一致，开局都轻装）
 /* —— 在场蛇数上限（当班制）——
    北京 28 条线全出场时，4096 格里挤着 28 条蛇，密度 >10%，
    「人堆」「互相穿身」都是这么来的；而且大部分蛇一辈子遇不到玩家，纯占算力。
@@ -798,12 +817,15 @@ const MODES = {
       return {x:x,y:y,station:true,name:s.name,line:s.line,lcolor:s.color,
               transfer:(tr&&tr.length>1)?tr.slice():null, value:value||1};
     },
-    onTick:function(){ ensureNextStation(); ensureTransfer(); },
-    /* 地铁版：吃到站 → 建设家园 + 换乘判定 + 打卡卡片 */
+    onTick:function(){ ensureNextStation(); },
+    /* 地铁版：吃到站 → 推进当前站 + 建设家园 + 换乘判定 + 打卡信息框 */
     onEat:function(sn,f){
       tryBuildHome(sn,f);
-      // 换乘站：可以跳到另一条线
-      if(f.name && TRANSFER[f.name] && TRANSFER[f.name].length>1){
+      // Phase D 规则②：蛇头当前所在站 = 刚吃到的站（沿真实站序前进的锚点）
+      if(sn.isPlayer) sn.curStation = f.name;
+      // 换乘站：仅当该站「在当前线路上」才允许换乘（规则①：换乘只能在当前线路的站点触发）
+      var L=sn.homeLine;
+      if(f.name && L && L.stations.indexOf(f.name)>=0 && TRANSFER[f.name] && TRANSFER[f.name].length>1){
         if(sn.isPlayer){
           if(autoMode){
             /* 托管全自动：不弹换乘面板，AI 直接选「自己还没点亮多少」的线换过去，
@@ -871,7 +893,14 @@ function stationIndex(){
 /* next 权重刻意压低：cand.next 只有「一个」站，权重一大就会把地图灌满这同一个站
    （实测 26 时占 40% 的生成量）。ensureNextStation() 已保证场上至少有一个下一站，
    所以这里调低不影响「按站序建设家园」的骨架玩法。 */
-var STATION_W={ next:12, nearCard:22, homeLine:18, transfer:6, unlit:8, other:6 };
+/* Phase D 权重：玩家只吃「当前线路的相邻站 + 已吃过的站（重吃长大）+ 当前线换乘枢纽」。
+   next  = 当前站的上一站/下一站（沿真实站序前进，骨架玩法）
+   revisit = 本线已点亮的非枢纽站（重吃长大，竞技循环）
+   transfer = 当前线真有的换乘枢纽（唯一允许弹换乘面板的站；规则①：换乘只能在本线站点触发）
+   other = 本线其它非枢纽站（兜底，避免空池）
+   已移除 nearCard/homeLine/unlit 三类：它们从全站池抽、会破坏「只吃相邻站」的规则。
+   transfer 权重压低（4）：枢纽天然集中在主线（如南京 1 号线），避免场上换乘豆过密。 */
+var STATION_W={ next:12, revisit:14, transfer:4, other:8 };
 var pickLastKind="";
 /* 枢纽判定 + 去枢纽过滤。
    ⚠ 关键：枢纽天然占全部车站 ~27%（北京 410 站里 111 个），所以「只把 transfer 那一类的权重调小」
@@ -891,30 +920,38 @@ function pickStation(){
   if(!STATION_POOL.length) return {name:"站",line:"",color:"#888"};
   stationIndex();
   var L=(player&&player.homeLine)?player.homeLine:null;
-  var cand={}, i, n, idx;
-  // ① 本线「下一站」：按真实站序建设家园，这是地铁版的骨架玩法。
-  //    就是这一个站（不参与去枢纽过滤），所以它是不是枢纽由站序决定。
-  if(L){ idx=nextIdxOf(player); if(idx<L.stations.length) cand.next=[L.stations[idx]]; }
-  // ② 差一次就出卡（去枢纽，避免弹卡后又弹换乘面板）
-  var near=[], f;
-  for(n in stationHits){ if(stationHits[n]===CARD_AT-1 && !cardsGot[n]) near.push(n); }
-  f=nonHub(near); if(f&&f.length) cand.nearCard=f;
-  // ③ 本线其他站（去枢纽）
-  if(L){ f=nonHub(L.stations.slice()); if(f&&f.length) cand.homeLine=f; }
-  // ④ 换乘站：唯一「刻意」提供枢纽的类，靠它维持换乘玩法不断供
-  if(TRANSFER_NAMES.length) cand.transfer=TRANSFER_NAMES;
-  // ⑤ 全网还没点亮卡片的站（去枢纽）
-  var unlit=[];
-  for(i=0;i<ALL_STATION_NAMES.length;i++) if(!cardsGot[ALL_STATION_NAMES[i]]) unlit.push(ALL_STATION_NAMES[i]);
-  f=nonHub(unlit); if(f&&f.length) cand.unlit=f;
-  cand.other=nonHub(ALL_STATION_NAMES,1);             // ⑥ 兜底（去枢纽，唯一允许退回全站的池）
-
+  var sn=player, cand={}, i, n;
+  if(L && sn && sn.curStation){
+    var ci=L.stations.indexOf(sn.curStation);
+    // ① 相邻站（上一站 / 下一站）：地铁版骨架，沿真实站序前进；最多两个，由站序决定（可能含枢纽）
+    var nb=[];
+    if(ci>=0){
+      if(ci+1<L.stations.length) nb.push(L.stations[ci+1]);
+      if(ci-1>=0) nb.push(L.stations[ci-1]);
+    }
+    if(nb.length) cand.next=nb;
+    // ② 吃过的站（重吃长大，Phase D 规则⑤）：本线已点亮的非枢纽站
+    var eaten=[];
+    for(n in cardsGot){ if(cardsGot[n] && !isHubName(n) && L.stations.indexOf(n)>=0) eaten.push(n); }
+    if(eaten.length) cand.revisit=eaten;
+  }
+  // ③ 当前线换乘枢纽：唯一允许弹换乘面板的站；只取「本线真有的枢纽」
+  //    （规则①：换乘只能在当前线路的站点触发 —— 不在本线的枢纽绝不出现为可换目标）
+  if(L){
+    var tr=[];
+    for(i=0;i<TRANSFER_NAMES.length;i++){ var nm=TRANSFER_NAMES[i]; if(L.stations.indexOf(nm)>=0) tr.push(nm); }
+    if(tr.length) cand.transfer=tr;
+  }
+  // ④ 兜底：本线其它非枢纽站（避免空池时完全没豆，也保证世界不空）
+  if(L){ var oth=nonHub(L.stations.slice()); if(oth&&oth.length) cand.other=oth; }
   var keys=[], tot=0, k;
   for(k in cand){ if(STATION_W[k]){ keys.push(k); tot+=STATION_W[k]; } }
+  if(!keys.length){ cand.other=nonHub(ALL_STATION_NAMES,1); if(cand.other){ keys=["other"]; tot=STATION_W.other; } }
   var r=Math.random()*tot, acc=0, pick="other";
   for(i=0;i<keys.length;i++){ acc+=STATION_W[keys[i]]; if(r<=acc){ pick=keys[i]; break; } }
   pickLastKind=pick;                                  // 供自检探针统计分布
   var arr=cand[pick]||cand.other;
+  if(!arr||!arr.length) arr=cand.other||(ALL_STATION_NAMES&&ALL_STATION_NAMES.length?ALL_STATION_NAMES:["站"]);
   n=arr[(Math.random()*arr.length)|0];
   // 同名站可能属于多条线（如「新街口」京宁都有），从池里随机挑一条的真实归属
   var pool=[], q;
@@ -1724,14 +1761,18 @@ function occSet(){
     for(var j=0;j<sn.body.length;j++) s[sn.body[j].x+","+sn.body[j].y]=1; }
   return s;
 }
-/* 地铁版：保证玩家「下一站」在地图上至少有一个。
-   否则玩家根本不知道该去找哪个站，「按真实站序收集本线站点」的记忆目的就落空了。 */
+/* 地铁版：保证玩家「当前站的相邻站」在地图上至少有一个（向前优先，到线尾则向后）。
+   否则玩家沿真实站序前进时找不到下一个目标，Phase D「只能吃相邻站」的骨架就断了。 */
 function ensureNextStation(){
-  if(!player||!player.alive||!player.homeLine) return;
+  if(!player||!player.alive||!player.homeLine||!player.curStation) return;
   if(!player.body||!player.body[0]) return;
-  var st=player.homeLine.stations, idx=nextIdxOf(player);
-  if(idx>=st.length) return;
-  var want=st[idx], i;
+  var L=player.homeLine, ci=L.stations.indexOf(player.curStation);
+  if(ci<0) return;
+  var want=null;
+  if(ci+1<L.stations.length) want=L.stations[ci+1];        // 向前一站
+  else if(ci-1>=0) want=L.stations[ci-1];                  // 到线尾 → 向后一站
+  if(!want) return;
+  var i;
   for(i=0;i<food.length;i++) if(food[i].name===want) return;   // 已存在，不用补
   var occ=occSet(), h=player.body[0], g=0, c=null;
   recountZones();
@@ -1739,42 +1780,16 @@ function ensureNextStation(){
     var rad=(g<60?5:10);                    // 先找附近，附近不行再放宽
     var t={x:(h.x+rnd(rad*2+1)-rad+WCOLS)%WCOLS, y:(h.y+rnd(rad*2+1)-rad+WROWS)%WROWS};
     if(occ[t.x+","+t.y]) continue;
-    // 尽量落在还不拥挤的分区，否则「下一站」本身又会变成一个豆子堆
+    // 尽量落在还不拥挤的分区，否则「相邻站」本身又会变成一个豆子堆
     if(zoneFood[zoneOf(t.x,t.y)]>=ZONE_HARD-2) continue;
     c=t;
   }
   if(!c) c=pickUnderCapCell(h.x,h.y);
   pushFood(c.x,c.y,1,want);   // forceName=站名：不能被挪走，必须落在玩家附近
 }
-/* 换乘保底：场上一个换乘站都没有时，主动在玩家附近补一个。
-   没有这一条，玩家可能连着几十拍都碰不到换乘站，换乘玩法整段「消失」。
-   但用 TRANSFER_ENSURE_CD 节流，避免「每拍都补」导致附近永远有换乘豆、频繁弹面板打断。 */
-var lastTransferEnsure=-999;
-function ensureTransfer(){
-  if(!player||!player.alive||!player.body||!player.body[0]) return;
-  stationIndex();
-  if(!TRANSFER_NAMES.length) return;
-  var i;
-  for(i=0;i<food.length;i++) if(food[i].transfer) return;   // 场上已有，不补
-  if(tickCount - lastTransferEnsure < TRANSFER_ENSURE_CD) return;   // 节流
-  lastTransferEnsure=tickCount;
-  var h=player.body[0], occ=occSet(), c=null, g, rad, t;
-  recountZones();
-  for(g=0;g<60 && !c;g++){
-    rad=(g<40?6:12);
-    t={x:(h.x+rnd(rad*2+1)-rad+WCOLS)%WCOLS, y:(h.y+rnd(rad*2+1)-rad+WROWS)%WROWS};
-    if(occ[t.x+","+t.y]) continue;
-    if(zoneFood[zoneOf(t.x,t.y)]>=ZONE_HARD-2) continue;
-    c=t;
-  }
-  if(!c) c=pickUnderCapCell(h.x,h.y);
-  // 挑一个玩家在这个站「真的换得过去」的站（transferOptions 非空），最多试 8 次
-  var name=TRANSFER_NAMES[(Math.random()*TRANSFER_NAMES.length)|0], tries=0;
-  while(tries<8 && transferOptions(player,name).length===0){
-    name=TRANSFER_NAMES[(Math.random()*TRANSFER_NAMES.length)|0]; tries++;
-  }
-  pushFood(c.x,c.y,1,name);
-}
+/* 换乘保底已移除（Phase D）：换乘枢纽现在只随「当前线路的相邻站」自然出现
+   （pickStation 的 transfer 类只取本线枢纽），不再全网随机强塞。
+   这样换乘面板不会频繁打断（呼应 Phase B 诉求），且严格满足「换乘只能在当前线路站点触发」。 */
 function spawnSnake(o){
   var len=o.len||START_LEN;
   // 开局分散：取「离所有已存在蛇最远」的格子当蛇头，避免一开局就叠成一团
@@ -1785,7 +1800,8 @@ function spawnSnake(o){
   return {id:o.id,name:o.name,color:o.color,isPlayer:!!o.isPlayer,alive:true,
     body:body, prev:body.map(function(c){return {x:c.x,y:c.y};}), dir:d, nextDir:d,
     score:len, boosting:false, respawnAt:0, hitCd:0, bc:0,
-    homeLine:null, lineIdx:0, lineProg:null, homeGlow:0, squeezeUntil:0, ev:0, pendDir:null, turnAt:0};
+    homeLine:null, lineIdx:0, lineProg:null, homeGlow:0, squeezeUntil:0, ev:0, pendDir:null, turnAt:0,
+    curStation:null};   // curStation：蛇头当前所在站（Phase D「只能吃相邻站」的锚点）
 }
 function reset(){
   food=[]; snakes=[]; tickCount=0;
@@ -1801,9 +1817,17 @@ function reset(){
     lineAssign[0]=playerLineIdx;
   }
   var pd=MODE.playerDef();
-  player=spawnSnake({id:0,name:pd.name,color:pd.color,isPlayer:true});
+  var pLen = MODE.lineBased ? 4 : 8;   // 地铁短起步（Phase D「生长游戏」）；文字线保持原长度
+  player=spawnSnake({id:0,name:pd.name,color:pd.color,isPlayer:true, len:pLen});
   if(nLines) applyLine(player, lineAssign[0]||0);      // 身份 = 领到的线路
   else player.homeLine=MODE.homeLineFor(0,true);
+  // Phase D 规则②：小蛇开局随机某条线的某一站（curStation = 当前所在站，沿真实站序前进的锚点）
+  if(player.homeLine){
+    var L0=player.homeLine, k0=(Math.random()*L0.stations.length)|0;
+    player.curStation=L0.stations[k0];
+    var pg0=player.lineProg[player.lineIdx];
+    if(pg0){ pg0.built[player.curStation]=1; pg0.next=Math.min(k0+1, L0.stations.length); }
+  }
   snakes.push(player);
   var nBots=MODE.botCount();
   for(var i=0;i<nBots;i++){ var d=MODE.botDef(i);
@@ -2186,20 +2210,52 @@ function closeCard(){
     lastTick=performance.now();
   }
 }
+/* 首次吃站的信息框（Phase D 新增规则④）：不暂停、自动收起，避免打断游戏性。
+   展示该站最核心的 2~3 段信息（位置/邻站/换乘/看点/坐标），让玩家「第一次吃到就认识这站」，
+   但不像完整打卡卡那样锁输入、暂停——契合用户 Phase B「换乘选择太打断」的诉求。 */
+var infoBoxEl=null, infoBoxT=null;
+function showInfoBox(cd){
+  if(!infoBoxEl) infoBoxEl=document.getElementById("infoBox");
+  if(!infoBoxEl) return;
+  var h='<div class="ib-top"><span class="ib-kicker">'+esc(cd.kicker)+'</span></div>'+
+        '<h4 class="ib-title"><span class="ib-dot" style="background:'+cd.color+'"></span>'+esc(cd.name)+'</h4>';
+  var shown=0;
+  for(var i=0;i<cd.rows.length && shown<3;i++){
+    var r=cd.rows[i]; if(!r.items||!r.items.length) continue;
+    h+='<div class="ib-sec"><b>'+esc(r.label)+'</b>'+esc(r.items.slice(0,2).join("、"))+'</div>';
+    shown++;
+  }
+  if(cd.coord && (cd.coord.real||cd.coord.line))
+    h+='<div class="ib-coord">'+(cd.coord.real?'<span class="ck">实际</span>'+esc(cd.coord.real):'')+
+       (cd.coord.line?'&nbsp;&nbsp;<span class="ck">线图</span>'+esc(cd.coord.line):'')+'</div>';
+  h+='<div class="ib-src">首次到访 · 公开常识整理</div>';
+  var el=document.createElement("div"); el.className="ib"; el.innerHTML=h;
+  while(infoBoxEl.children && infoBoxEl.children.length) infoBoxEl.removeChild(infoBoxEl.firstChild);
+  infoBoxEl.appendChild(el);
+  if(infoBoxT){ clearTimeout(infoBoxT); }
+  infoBoxT=setTimeout(closeInfo,4200);          // 真实浏览器里自动收起；无头测试由测试手动 closeInfo
+}
+function closeInfo(){
+  if(infoBoxEl){ while(infoBoxEl.children && infoBoxEl.children.length) infoBoxEl.removeChild(infoBoxEl.firstChild); }
+  if(infoBoxT){ clearTimeout(infoBoxT); infoBoxT=null; }
+}
 /* 吃到车站后的打卡逻辑（只统计玩家自己的蛇） */
 function onStationEaten(sn,f){
   if(!sn.isPlayer||!f||!f.name) return;
   stationHits[f.name]=(stationHits[f.name]||0)+1;
   var n=stationHits[f.name];
-  // 飘字把「还要吃几次出卡」讲明白，否则玩家不知道这个机制存在
-  if(n<CARD_AT) sn.popText = (n===1) ? "打卡 ✓" : ("打卡 "+n+"/"+CARD_AT+" · 再吃一次出卡");
+  // 飘字：第一次吃站 = 打卡；再吃 = 重吃长大（Phase D 规则⑤）
+  if(n===1) sn.popText = "打卡 ✓";
+  else sn.popText = "重吃 +1 · 长大";
   sn.popT=12;
-  if(n>=CARD_AT && !cardsGot[f.name]){
+  /* Phase D 规则④：第一次吃掉某站 → 弹信息框（不暂停，见 showInfoBox）+ 一次性 +2 成长奖励。
+     之后（重吃）不再弹框，只按 f.value 正常 +1 长大 —— 形成「先认识、后刷量」的竞技循环。 */
+  if(n===1 && !cardsGot[f.name]){
     cardsGot[f.name]=1;
-    var t=sn.body[sn.body.length-1];      // 弹卡奖励：一次性 +2 节
+    var t=sn.body[sn.body.length-1];      // 首吃奖励：一次性 +2 节
     sn.body.push({x:t.x,y:t.y}); sn.body.push({x:t.x,y:t.y});
-    sn.popText="站卡 +2"; sn.popT=14;
-    showCard(buildStationCard(f.name));
+    sn.popText="首站卡 +2"; sn.popT=14;
+    showInfoBox(buildStationCard(f.name));
     saveProgress();                          // 点亮状态存盘（成就大图要用）
     updateCardCount();                       // HUD/按钮上的卡片数立刻跟上
   } else if(n===1){ saveProgress(); updateCardCount(); }
@@ -3847,6 +3903,212 @@ requestAnimationFrame(frame);
 /* ?map=1 直接进成就大图（也方便截图/分享链接） */
 try{ if(MODE.lineBased && new URLSearchParams(location.search).get("map")==="1") openAchieve(); }catch(e){}
 
+/* ================= 地铁城市晋级赛（ladder） =================
+   框架：列出「有地铁的中国城市」→ 城市(线路竞技) → 全省 → 全区(8 赛区，含港澳台)
+   → 全国 → 全洲(亚洲) → 全球火车。
+   晋级判定：在某城点亮一定比例站点（覆盖度）即通关该城；某省全部城市通关→全省；
+   某区全部省通关→全区；8 赛区全通关→全国→全洲→全球。
+   覆盖度读现有 snake_achieve_<id>.c（点亮站卡数），无需额外存储。
+   注：目前仅北京/南京有可玩数据，其余城市标「敬请期待」，待后续填充。 */
+var LADDER = {
+  clearPct: 0.5,                 // 城市通关阈值：点亮 >= 50% 站点
+  regions: [
+    { name:"华北", cities:[
+      { city:"北京", prov:"北京市", theme:"beijing" },
+      { city:"天津", prov:"天津市" },
+      { city:"石家庄", prov:"河北省" },
+      { city:"太原", prov:"山西省" },
+      { city:"呼和浩特", prov:"内蒙古自治区" }
+    ]},
+    { name:"东北", cities:[
+      { city:"沈阳", prov:"辽宁省" },
+      { city:"大连", prov:"辽宁省" },
+      { city:"长春", prov:"吉林省" },
+      { city:"哈尔滨", prov:"黑龙江省" }
+    ]},
+    { name:"华东", cities:[
+      { city:"上海", prov:"上海市" },
+      { city:"南京", prov:"江苏省", theme:"nanjing" },
+      { city:"苏州", prov:"江苏省" },
+      { city:"无锡", prov:"江苏省" },
+      { city:"常州", prov:"江苏省" },
+      { city:"徐州", prov:"江苏省" },
+      { city:"南通", prov:"江苏省" },
+      { city:"杭州", prov:"浙江省" },
+      { city:"宁波", prov:"浙江省" },
+      { city:"温州", prov:"浙江省" },
+      { city:"绍兴", prov:"浙江省" },
+      { city:"金华", prov:"浙江省" },
+      { city:"合肥", prov:"安徽省" },
+      { city:"芜湖", prov:"安徽省" },
+      { city:"福州", prov:"福建省" },
+      { city:"厦门", prov:"福建省" },
+      { city:"南昌", prov:"江西省" },
+      { city:"济南", prov:"山东省" },
+      { city:"青岛", prov:"山东省" }
+    ]},
+    { name:"华中", cities:[
+      { city:"武汉", prov:"湖北省" },
+      { city:"长沙", prov:"湖南省" },
+      { city:"郑州", prov:"河南省" },
+      { city:"洛阳", prov:"河南省" }
+    ]},
+    { name:"华南", cities:[
+      { city:"广州", prov:"广东省" },
+      { city:"深圳", prov:"广东省" },
+      { city:"佛山", prov:"广东省" },
+      { city:"东莞", prov:"广东省" },
+      { city:"南宁", prov:"广西壮族自治区" }
+    ]},
+    { name:"西南", cities:[
+      { city:"成都", prov:"四川省" },
+      { city:"重庆", prov:"重庆市" },
+      { city:"昆明", prov:"云南省" },
+      { city:"贵阳", prov:"贵州省" }
+    ]},
+    { name:"西北", cities:[
+      { city:"西安", prov:"陕西省" },
+      { city:"兰州", prov:"甘肃省" },
+      { city:"乌鲁木齐", prov:"新疆维吾尔自治区" },
+      { city:"银川", prov:"宁夏回族自治区" },
+      { city:"西宁", prov:"青海省" }
+    ]},
+    { name:"港澳台", cities:[
+      { city:"香港", prov:"香港特别行政区", note:"港铁" },
+      { city:"澳门", prov:"澳门特别行政区", note:"澳门轻轨" },
+      { city:"台北", prov:"台湾省", note:"台北捷运" },
+      { city:"高雄", prov:"台湾省", note:"高雄捷运" },
+      { city:"台中", prov:"台湾省", note:"台中捷运" }
+    ]}
+  ]
+};
+
+function ladderCityTotal(id){ var T=THEMES[id]; if(!T||!T.lines) return 0; var n=0,i; for(i=0;i<T.lines.length;i++) n+=T.lines[i].stations.length; return n; }
+function ladderCityLit(id){
+  try{ var o=JSON.parse(localStorage.getItem(ACHIEVE_KEY+id)||"{}"); if(o&&o.c) return Object.keys(o.c).length; }catch(e){}
+  return 0;
+}
+function ladderCityCleared(c){ if(!c.theme) return false; var total=ladderCityTotal(c.theme), lit=ladderCityLit(c.theme); return total>0 && lit/total >= LADDER.clearPct; }
+function ladderProvinceCleared(prov){
+  var found=false;
+  for(var ri=0;ri<LADDER.regions.length;ri++){ var R=LADDER.regions[ri];
+    for(var ci=0;ci<R.cities.length;ci++){ if(R.cities[ci].prov===prov){ found=true; if(!ladderCityCleared(R.cities[ci])) return false; } }
+  }
+  return found;
+}
+function ladderRegionCleared(rname){
+  var R=null; for(var ri=0;ri<LADDER.regions.length;ri++) if(LADDER.regions[ri].name===rname) R=LADDER.regions[ri];
+  if(!R) return false;
+  var provs={}; for(var ci=0;ci<R.cities.length;ci++) provs[R.cities[ci].prov]=1;
+  for(var p in provs){ if(!ladderProvinceCleared(p)) return false; }
+  return true;
+}
+function ladderCount(level){
+  var n=0;
+  if(level==="city"){ LADDER.regions.forEach(function(R){ R.cities.forEach(function(c){ if(ladderCityCleared(c)) n++; }); }); }
+  else if(level==="prov"){ var ps={}; LADDER.regions.forEach(function(R){ R.cities.forEach(function(c){ ps[c.prov]=1; }); }); for(var p in ps) if(ladderProvinceCleared(p)) n++; }
+  else if(level==="region"){ LADDER.regions.forEach(function(R){ if(ladderRegionCleared(R.name)) n++; }); }
+  return n;
+}
+function ladderAllRegionsCleared(){ return ladderCount("region") >= LADDER.regions.length; }
+
+function ladderHTML(){
+  var cCity=ladderCount("city"), cProv=ladderCount("prov"), cReg=ladderCount("region");
+  var national=ladderAllRegionsCleared();
+  var tiers=[
+    { name:"线路竞技", sub:cCity+" 城已通关" },
+    { name:"全省", sub:cProv+" 省已通关" },
+    { name:"全区", sub:cReg+"/"+LADDER.regions.length+" 赛区已通关" },
+    { name:"全国", sub:national?"已通关":"需先通关全区" },
+    { name:"全洲 · 亚洲", sub:national?"已通关":"需先通关全国" },
+    { name:"全球火车", sub:national?"已通关":"需先通关全洲" }
+  ];
+  var tiersHTML=tiers.map(function(t){ return '<div class="lt"><b>'+t.name+'</b><span>'+t.sub+'</span></div>'; }).join("");
+  var regionsHTML="";
+  LADDER.regions.forEach(function(R){
+    var cards="";
+    R.cities.forEach(function(c){
+      if(c.theme){
+        var total=ladderCityTotal(c.theme), lit=ladderCityLit(c.theme), pct= total? Math.round(lit/total*100):0;
+        var cleared=ladderCityCleared(c);
+        cards += '<div class="lcity on">'+
+          '<div class="lc-name">'+c.city+'</div>'+
+          '<div class="lc-prov">'+c.prov+'</div>'+
+          '<div class="lc-bar"><i style="width:'+Math.min(100,pct)+'%"></i></div>'+
+          '<div class="lc-t">已点亮 '+lit+'/'+total+'（'+pct+'%）'+(cleared?' · 已通关':'')+'</div>'+
+          '<a class="lc-go" href="play.html?theme='+c.theme+'&from=ladder">进入 →</a>'+
+          '</div>';
+      } else {
+        cards += '<div class="lcity off">'+
+          '<div class="lc-name">'+c.city+'</div>'+
+          '<div class="lc-prov">'+c.prov+(c.note?(' · '+c.note):'')+'</div>'+
+          '<div class="lc-t">敬请期待</div>'+
+          '</div>';
+      }
+    });
+    regionsHTML += '<div class="lregion"><div class="lr-title">'+R.name+'</div><div class="lr-grid">'+cards+'</div></div>';
+  });
+  return ''+
+    '<div class="ladder-head">'+
+      '<a class="ladder-back" href="snake/index.html">← 返回</a>'+
+      '<h1>地铁城市晋级赛</h1>'+
+      '<p class="ladder-sub">用真实地铁站「点亮」一座城 → 全省 → 全区（含港澳台）→ 全国 → 全洲（亚洲）→ 全球火车。当前仅北京 / 南京可玩，其余城市「敬请期待」。</p>'+
+    '</div>'+
+    '<div class="ladder-tiers">'+tiersHTML+'</div>'+
+    '<div class="ladder-regions">'+regionsHTML+'</div>';
+}
+
+var LADDER_CSS =
+  "#ladderWrap{position:fixed;inset:0;background:#f3eee3;overflow:auto;z-index:60;padding:22px 14px 48px;color:#26262a;font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;}"+
+  ".ladder-head{max-width:1000px;margin:0 auto 14px;}"+
+  ".ladder-back{display:inline-block;font-size:12px;color:#696357;text-decoration:none;margin-bottom:8px;}"+
+  ".ladder-head h1{font-size:26px;letter-spacing:4px;margin:2px 0 6px;}"+
+  ".ladder-sub{font-size:12px;color:#5d5850;line-height:1.7;margin:0;}"+
+  ".ladder-tiers{display:flex;flex-wrap:wrap;gap:8px;max-width:1000px;margin:0 auto 18px;}"+
+  ".lt{background:#fff;border:1px solid #d8cfbd;border-radius:12px;padding:10px 14px;min-width:140px;}"+
+  ".lt b{display:block;font-size:14px;color:#1f6f6b;font-weight:600;}"+
+  ".lt span{font-size:11px;color:#5d5850;}"+
+  ".ladder-regions{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;max-width:1000px;margin:0 auto;}"+
+  ".lregion{background:#fffdf8;border:1px solid #e3dccb;border-radius:16px;padding:14px;}"+
+  ".lr-title{font-size:16px;color:#1f6f6b;letter-spacing:2px;margin-bottom:10px;font-weight:600;}"+
+  ".lr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}"+
+  ".lcity{border:1px solid #e3dccb;border-radius:12px;padding:10px;background:#faf7ef;}"+
+  ".lcity.on{border-color:#1f6f6b;background:#eef6f4;}"+
+  ".lc-name{font-size:15px;font-weight:600;}"+
+  ".lc-prov{font-size:11px;color:#5d5850;margin:2px 0 6px;}"+
+  ".lc-bar{height:5px;border-radius:3px;background:rgba(31,111,107,.14);overflow:hidden;margin:4px 0;}"+
+  ".lc-bar i{display:block;height:100%;background:linear-gradient(90deg,#2f9b95,#1f6f6b);}"+
+  ".lc-t{font-size:11px;color:#5d5850;}"+
+  ".lc-go{display:inline-block;margin-top:6px;font-size:12px;color:#1f6f6b;text-decoration:none;font-weight:600;}"+
+  ".ladder-back-btn{position:fixed;top:10px;left:10px;z-index:80;background:#1f6f6b;color:#fff;font-size:12px;padding:7px 12px;border-radius:10px;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.2);}";
+
+function enterLadder(){
+  var so=document.getElementById("startOverlay"); if(so) so.classList.add("hidden");
+  var po=document.getElementById("pauseOverlay"); if(po) po.classList.add("hidden");
+  var wo=document.getElementById("winOverlay"); if(wo) wo.classList.add("hidden");
+  var wrap=document.getElementById("ladderWrap");
+  if(!wrap){
+    var st=document.createElement("style"); st.id="ladderStyle"; st.textContent=LADDER_CSS; document.head.appendChild(st);
+    wrap=document.createElement("div"); wrap.id="ladderWrap"; document.body.appendChild(wrap);
+  }
+  wrap.innerHTML=ladderHTML();
+  wrap.classList.remove("hidden");
+  wrap.scrollTop=0;
+}
+function exitLadder(){ var wrap=document.getElementById("ladderWrap"); if(wrap) wrap.classList.add("hidden"); var so=document.getElementById("startOverlay"); if(so) so.classList.remove("hidden"); }
+function injectLadderBack(){
+  if(document.getElementById("ladderBack")) return;
+  var b=document.createElement("a"); b.id="ladderBack"; b.className="ladder-back-btn"; b.href="play.html?mode=ladder"; b.textContent="← 晋级赛";
+  document.body.appendChild(b);
+}
+
+/* 晋级赛入口判定：?mode=ladder 进总览；?from=ladder 在城里游戏时挂「返回晋级赛」按钮 */
+try{
+  var _lp=new URLSearchParams(location.search);
+  if(_lp.get("mode")==="ladder"){ enterLadder(); }
+  else if(_lp.get("from")==="ladder"){ injectLadderBack(); }
+}catch(e){}
+
 /* ===== 无头自检用的只读探针 =====
    整个脚本包在 IIFE 里，冒烟测试读不到顶层 var；
    这里显式挂几个「只读快照」到 window，测试就能断言空间秩序和打卡计数。
@@ -3874,6 +4136,9 @@ window.__SNAKE__={
   /* 仅供无头截图：把卡片层做成「点击层」用（真实逻辑靠 card-foot 的按钮） */
   keepCard:function(){ return {paused:paused, cardPaused:cardPaused}; },
   closeCard:function(){ closeCard(); return {paused:paused, cardPaused:cardPaused}; },
+  /* Phase D：首次吃站的信息框（不暂停）的自检钩子 */
+  infoOpen:function(){ return !!infoBoxEl && infoBoxEl.children.length>0; },
+  closeInfo:function(){ closeInfo(); return {infoOpen:!!infoBoxEl && infoBoxEl.children.length>0}; },
   isPaused:function(){ return paused; },
   /* —— 机制④ 换乘玩法自检 —— */
   lineAssign:function(){ return lineAssign.slice(); },
@@ -4009,6 +4274,47 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
     var i,h=0;
     for(i=0;i<food.length;i++) if(food[i].name&&TRANSFER[food[i].name]&&TRANSFER[food[i].name].length>1) h++;
     return {total:food.length, hub:h}; },
+  /* 场上豆子枢纽密度（玩家眼睛看到的）—— 确定性、按全线路平均，消除「随机开局线」抖动。
+     做法：把 player 锚到每条线的每一站，对该站调用 ensureNextStation()（放「相邻站」豆子），
+     走完全网后统计 food 里枢纽占比。等价于「玩家沿各线行走时，相邻站豆子的平均枢纽密度」，
+     与 hubRateByLine 同一思路（主线 1 号线枢纽密集会虚高，全线路平均才是公正口径）。 */
+  foodHubRatioByLine:function(){
+    stationIndex();
+    if(!player) return {hub:0,nonhub:0,total:0};
+    var savedFood=food.slice(); food.length=0;
+    var sv={lineIdx:player.lineIdx,curStation:player.curStation,homeLine:player.homeLine,lineProg:player.lineProg};
+    var li, si, L;
+    for(li=0; li<THEME.lines.length; li++){
+      L=THEME.lines[li];
+      player.lineIdx=li; player.homeLine=L; player.lineProg={}; player.lineProg[li]={next:0,built:{}};
+      for(si=0; si<L.stations.length; si++){ player.curStation=L.stations[si]; ensureNextStation(); }
+    }
+    var i,h=0,M=food.length;
+    for(i=0;i<M;i++) if(food[i].name&&TRANSFER[food[i].name]&&TRANSFER[food[i].name].length>1) h++;
+    food.length=0; for(i=0;i<savedFood.length;i++) food.push(savedFood[i]);
+    player.lineIdx=sv.lineIdx; player.homeLine=sv.homeLine; player.curStation=sv.curStation; player.lineProg=sv.lineProg;
+    return {total:M, hub:h, nonhub:M-h};
+  },
+  /* 全线路平均枢纽占比：逐线、逐站把 player 锚到该站再抽样，消除「随机开局线」带来的抖动
+     （主线 1 号线枢纽密集，单看一条线会把占比虚高到 60%+；全线路平均才是公正口径）。
+     枢纽只能来自「相邻站(next) + 本线换乘枢纽(transfer)」，revisit/other 已去枢纽，
+     所以全线路平均占比天然被压在「各线枢纽比例」附近。 */
+  hubRateByLine:function(N){
+    stationIndex();
+    if(!player) return {hub:0,nonhub:0};
+    N=N||30; var total=0, hub=0, li, si, i, st;
+    var sv={lineIdx:player.lineIdx,curStation:player.curStation,homeLine:player.homeLine,lineProg:player.lineProg};
+    for(li=0; li<THEME.lines.length; li++){
+      var L=THEME.lines[li];
+      player.lineIdx=li; player.homeLine=L; player.lineProg={}; player.lineProg[li]={next:0,built:{}};
+      for(si=0; si<L.stations.length; si++){
+        player.curStation=L.stations[si];
+        for(i=0;i<N;i++){ st=pickStation(); if(st&&st.name&&TRANSFER[st.name]&&TRANSFER[st.name].length>1) hub++; total++; }
+      }
+    }
+    player.lineIdx=sv.lineIdx; player.homeLine=sv.homeLine; player.curStation=sv.curStation; player.lineProg=sv.lineProg;
+    return {hub:hub, nonhub:total-hub};
+  },
   cardStats:function(){ var k=0,n; for(n in cardsGot) if(cardsGot[n]) k++;
     var near=0; for(n in stationHits) if(stationHits[n]===CARD_AT-1 && !cardsGot[n]) near++;
     return { cards:k, near:near, hits:Object.keys(stationHits).length }; },
@@ -4018,7 +4324,10 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
     for(i=0;i<m;i++) stationHits[ALL_STATION_NAMES[i]]=CARD_AT-1;
     return m; },
   areaOf:function(n){ return AREA[n]||""; },
-  foodZoneCount:function(){ var k=0, x; for(x in FOODZONE) k++; return k; }
+  foodZoneCount:function(){ var k=0, x; for(x in FOODZONE) k++; return k; },
+  ladderRegions:function(){ return LADDER.regions.length; },
+  ladderPlayable:function(){ var n=0; LADDER.regions.forEach(function(R){ R.cities.forEach(function(c){ if(c.theme) n++; }); }); return n; },
+  ladderClearedCity:function(city){ var c=null; LADDER.regions.forEach(function(R){ R.cities.forEach(function(ci){ if(ci.city===city) c=ci; }); }); return c?ladderCityCleared(c):false; }
 };
 })();
 </script>

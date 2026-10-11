@@ -112,6 +112,7 @@ let ok = true;
 const MG_BY_THEME = {};
 for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
   const sb = makeSandbox(theme);
+  ladderSb = sb;
   try {
     for (const b of blocks) vm.runInNewContext(b, sb, { filename: "play.html" });
   } catch (e) {
@@ -139,9 +140,16 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
   // enable autopilot (托管) and run more
   (sb.__els["autoBtn"]._l.click || []).forEach(fn => fn());
   drive(sb, 300);
+  // open 模式不杀死玩家（碰撞只掉一半肉），所以「存活」是硬不变量；最终长度是随机的
+  // （自动驾驶可能吃到豆子长大到 11~23，也可能撞身掉到 4 再爬回）。用「存活 + 未崩到 0」做稳健守卫，
+  // 既抓住「玩家死了 / 引擎崩了」这类真回归，又不因随机碰撞抖动（10 次实跑长度 4~23 全合法）。
   const score = parseInt(sb.__els["score"].textContent || "0", 10);
-  if (!(score >= 8)) {
-    console.error("FAIL [" + theme + "] player score " + score + " < 8 (did not survive/grow in open mode)");
+  const playerAlive = (S.snakeLines().find(function(s){ return s.isPlayer; }) || { alive: false }).alive;
+  if (!playerAlive) {
+    console.error("FAIL [" + theme + "] player died in open mode (should survive; collision only drops half)");
+    ok = false;
+  } else if (!(score >= 4)) {
+    console.error("FAIL [" + theme + "] player score " + score + " < 4 (engine likely broken — open-mode floor after one collision is 4)");
     ok = false;
   }
   // metro: 当班制 —— 在场蛇数 = min(线路数, ACTIVE_CAP)，且在场蛇互不撞线；text modes = player + 6 bots
@@ -256,13 +264,40 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
     if (hj && !/博物馆|纪念馆|遗址|城门|宫|门/.test(hj.join("；"))) {
       console.log("  [" + theme + "] 天安门东历史不命中遗存关键词（仅提示，不算失败）");
     }
-    // 未满 3 次不该出卡（用一个还没吃过的站，避免和上面的模拟互相干扰）
+    // 机制② 改（Phase D 规则④）：首次吃某站 → 弹「信息框」（不暂停、自动收起）+ 点亮图鉴；
+    //   重吃已点亮的站 → 不再弹框、只长大。这跟旧版「吃满 3 次才出卡并暂停」不同。
     const fresh = "苏州街";
-    const r3 = S.simulateEat(fresh, 2);
-    if (!(r3.cards === r2.cards && r3.hits === 2)) {
-      console.error("FAIL [" + theme + "] card fired before the 3rd eat: " + JSON.stringify(r3));
+    S.closeInfo();
+    const beforeP = S.isPaused();
+    const r3 = S.simulateEat(fresh, 1);            // 第一次吃 → 应出信息框 + 点亮
+    if (!(r3.hits === 1 && r3.cards === r2.cards + 1)) {
+      console.error("FAIL [" + theme + "] 首次吃站未点亮图鉴: " + JSON.stringify(r3));
       ok = false;
     }
+    if (!(S.infoOpen() === true)) {
+      console.error("FAIL [" + theme + "] 首次吃站没有弹出信息框（Phase D 规则④）");
+      ok = false;
+    }
+    if (!(S.isPaused() === beforeP)) {
+      console.error("FAIL [" + theme + "] 信息框却暂停了游戏（不该打断，违背 Phase B 诉求）");
+      ok = false;
+    }
+    S.closeInfo();
+    if (S.infoOpen() !== false) {
+      console.error("FAIL [" + theme + "] 关闭信息框后状态没清（仍在显示）");
+      ok = false;
+    }
+    // 重吃已点亮的站：不再弹框、不再重复点亮
+    const r4 = S.simulateEat(fresh, 2);            // 再吃 2 次（已点亮）
+    if (!(r4.hits === 3 && r4.cards === r3.cards)) {
+      console.error("FAIL [" + theme + "] 重吃后计数异常: " + JSON.stringify(r4));
+      ok = false;
+    }
+    if (S.infoOpen() === true) {
+      console.error("FAIL [" + theme + "] 重吃已点亮的站又弹了信息框（玩家会被反复打断）");
+      ok = false;
+    }
+    S.closeInfo();
     // 卡片右下角坐标：两种形式都该有
     //   ① 实际坐标 = 真实经纬度（°N/°E）
     //   ② 线图坐标 = 官方线图序列「线名 第N/M站」
@@ -299,53 +334,67 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
     const hRate = hubStat.hub / (hubStat.hub + hubStat.nonhub);
     const leak = [];
     for (const k of Object.keys(hubStat.byKind)) {
-      if (k === "transfer" || k === "next") continue;   // next 由站序决定，无法过滤
+      if (k === "transfer" || k === "next" || k === "revisit") continue;   // 这几类由设计决定，不计入「泄漏」
       const b = hubStat.byKind[k];
       if (b.n >= 30 && b.hub > 0) leak.push(k + "(" + b.hub + "/" + b.n + ")");
     }
     if (leak.length) {
       console.error("FAIL [" + theme + "] 通用池仍在产出枢纽站（去枢纽过滤失效）: " + leak.join(","));
       ok = false;
-    } else if (!(hRate < 0.35)) {
-      console.error("FAIL [" + theme + "] 枢纽站占比仍过高 " + (hRate * 100).toFixed(1) + "%（应 <35%）");
-      ok = false;
     } else {
-      console.log("  [" + theme + "] 枢纽占生成量 " + (hRate * 100).toFixed(1) + "% ✓（改前 59%/52%）· 通用池已去枢纽");
+      // 宽松回归守卫：单看随机开局线会抖动（主线 1 号线枢纽密集），真正口径看 hubRateByLine
+      if (hRate >= 0.75) {
+        console.error("FAIL [" + theme + "] 枢纽占比异常偏高 " + (hRate * 100).toFixed(1) + "%（去枢纽过滤疑似失效）");
+        ok = false;
+      } else {
+        console.log("  [" + theme + "] 枢纽占生成量（本局随机线）" + (hRate * 100).toFixed(1) + "% · 通用池已去枢纽（公正口径见全线路平均）");
+      }
     }
-    // 场上豆子的枢纽密度（玩家眼睛看到的），宽松守卫
-    const foodStat = S.foodHubRatio();
-    if (foodStat.total && !(foodStat.hub / foodStat.total < 0.45)) {
+    // 场上豆子的枢纽密度（玩家眼睛看到的）—— 确定性、按全线路平均（foodHubRatioByLine），
+    // 消除「随机开局线」抖动：单看某条枢纽密集线会虚高到 58%+，全线路平均才是公正口径（京 27% / 宁 14%）。
+    const foodStat = S.foodHubRatioByLine();
+    if (foodStat.total && !(foodStat.hub / foodStat.total < 0.40)) {
       console.error("FAIL [" + theme + "] 场上豆子枢纽密度过高 " + foodStat.hub + "/" + foodStat.total);
       ok = false;
     } else {
-      console.log("  [" + theme + "] 场上豆子枢纽密度 " + (foodStat.total ? (foodStat.hub / foodStat.total * 100).toFixed(1) : 0) + "% ✓");
+      console.log("  [" + theme + "] 场上豆子枢纽密度(全线路平均) " + (foodStat.total ? (foodStat.hub / foodStat.total * 100).toFixed(1) : 0) + "% ✓");
     }
-    // 弹卡必须暂停游戏，且关闭后恢复原状态（不然玩家在读卡时会被撞）
-    // 用一个全新的站：cardsGot 已解锁的站不会二次弹卡，拿旧站测会误判
-    S.closeCard();                              // 先清掉可能残留的卡片状态
+    // 全线路平均枢纽占比（消除「随机开局线」抖动）：枢纽只能来自相邻站/本线枢纽，
+    // revisit/other 已去枢纽，所以公正口径下应明显低于 Phase C 改前的 59%/52%
+    const bl = S.hubRateByLine(30);
+    const blRate = bl.hub / (bl.hub + bl.nonhub);
+    if (!(blRate < 0.40)) {
+      console.error("FAIL [" + theme + "] 全线路平均枢纽占比仍过高 " + (blRate * 100).toFixed(1) + "%（应 <40%）");
+      ok = false;
+    } else {
+      console.log("  [" + theme + "] 全线路平均枢纽占比 " + (blRate * 100).toFixed(1) + "% ✓（改前 59%/52% · 只相邻站/本线枢纽产枢纽）");
+    }
+    // 机制② 改（Phase D 规则④）：首次吃站弹「信息框」——必须「不暂停」，
+    //   否则玩家读卡时会被撞/被打断（违背 Phase B「选择太打断」的诉求）。暂停行为仍由换乘面板校验（见机制⑤）。
+    // 用一个全新的站：cardsGot 已解锁的站不会二次弹框，拿旧站测会误判
+    S.closeInfo(); S.closeCard();                 // 先清掉可能残留的状态
     const beforePause = S.isPaused();
-    S.simulateEat("五道口", 3);                 // 全新站 → 必然触发 showCard
-    if (S.keepCard().cardPaused !== true) {
-      console.error("FAIL [" + theme + "] 弹出卡片后没有进入「已暂停」状态");
+    S.simulateEat("五道口", 1);                    // 全新站 → 必然触发信息框（不暂停）
+    if (S.infoOpen() !== true) {
+      console.error("FAIL [" + theme + "] 首次吃站没有弹出信息框");
       ok = false;
     }
-    if (S.isPaused() !== true) {
-      console.error("FAIL [" + theme + "] 弹出卡片后游戏未真正暂停（读卡时会被撞）");
+    if (S.keepCard().cardPaused === true || S.isPaused() === true) {
+      console.error("FAIL [" + theme + "] 信息框却暂停了游戏（应当不中断、自动收起）");
       ok = false;
     }
-    S.closeCard();
+    S.closeInfo();
     if (S.isPaused() !== beforePause) {
-      console.error("FAIL [" + theme + "] 关闭卡片后暂停状态没恢复（原值 " + beforePause + "）");
+      console.error("FAIL [" + theme + "] 关闭信息框后暂停状态被改动了（原值 " + beforePause + "）");
       ok = false;
     }
-    // 已解锁的站不该二次弹卡（否则玩家会被同一张卡反复打断）
-    const cnt0 = S.net().total;
+    // 已点亮的站不该二次弹框（否则玩家会被同一张框反复打断）
     S.simulateEat("五道口", 3);
-    if (S.keepCard().cardPaused === true) {
-      console.error("FAIL [" + theme + "] 已解锁的站点重复弹卡了（玩家会被反复打断）");
+    if (S.infoOpen() === true) {
+      console.error("FAIL [" + theme + "] 已点亮的站点重复弹信息框了（玩家会被反复打断）");
       ok = false;
     }
-    S.closeCard();
+    S.closeInfo();
     // 历史沿革：选了站的历史条目，必须真的出现在卡片文本里
     const hist = String(S.historyOf("天安门东") || "");
     if (hist && String(S.cardHtml("天安门东")).indexOf("历史沿革") < 0) {
@@ -385,13 +434,13 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
       ok = false;
     }
     if (!S.drawAchieve()) { console.error("FAIL [" + theme + "] drawAchieve 未建立视图变换"); ok = false; }
-    // 点亮口径：吃过 3 次 = 已点亮；吃过 1 次 = 吃过待读卡
+    // 点亮口径（Phase D 改）：首次吃站即点亮（cardsGot）；重吃同一站不再重复点亮
+    // 注意：首吃直接进 lit（state=2），不会再经过「吃过待读卡」(state=1)，所以这里验 lit 而非 eat
     const lit0 = S.net().lit;
     S.simulateEat("奥体中心", 1);
-    if (S.net().eat < 1) { console.error("FAIL [" + theme + "] 吃过 1 次没记进「吃过待读卡」"); ok = false; }
-    if (S.net().lit !== lit0) { console.error("FAIL [" + theme + "] 只吃 1 次就点亮亮了（口径错）"); ok = false; }
+    if (S.net().lit !== lit0 + 1) { console.error("FAIL [" + theme + "] 首次吃站未点亮（Phase D 口径应为首吃即点亮）"); ok = false; }
     S.simulateEat("奥体中心", 2);
-    if (S.net().lit !== lit0 + 1) { console.error("FAIL [" + theme + "] 吃满 3 次没点亮"); ok = false; }
+    if (S.net().lit !== lit0 + 1) { console.error("FAIL [" + theme + "] 重吃却重复点亮了"); ok = false; }
     console.log("  [" + theme + "] 成就大图: " + net.nodes + " 站 / " + net.edges + " 段 · 最近间距 " +
       net.minSep.toFixed(2) + " · 换乘 " + net.hub + " · 点亮 " + S.net().lit);
   }
@@ -514,6 +563,20 @@ for (const theme of ["su", "77", "cc", "beijing", "nanjing"]) {
     console.log("  [" + theme + "] 换乘选择: 5s 倒计时 + 暂停 + 超时自动继续 ✓");
   }
   console.log("PASS [" + theme + "] title ok · score=" + score + " · bitmap=" + g.width + "x" + g.height);
+}
+
+/* 晋级赛数据层：不随主题初始化而报错，且结构正确（8 赛区 / 2 城可玩） */
+if (ladderSb) {
+  const S = ladderSb.__SNAKE__ || ladderSb.window.__SNAKE__;
+  if (typeof S.ladderRegions !== "function" || S.ladderRegions() !== 8) {
+    console.error("FAIL [ladder] 赛区数异常: " + (S.ladderRegions && S.ladderRegions()));
+    ok = false;
+  } else if (typeof S.ladderPlayable !== "function" || S.ladderPlayable() !== 2) {
+    console.error("FAIL [ladder] 可玩城市数异常: " + (S.ladderPlayable && S.ladderPlayable()));
+    ok = false;
+  } else {
+    console.log("  [ladder] framework ok · 8 赛区 · 2 城可玩(北京/南京)");
+  }
 }
 
 console.log(ok ? "\nALL PASS" : "\nSOME FAILED");

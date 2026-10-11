@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2eee5">
+<meta name="description" content="Bell 多人游戏房间：2–8 人自定义昵称，准备开局，德国心脏病与潘神心脏病。">
+<title>Bell · 多人房间 · C-games</title>
+<link rel="stylesheet" href="./style.css">
+<script defer src="./core.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<div class="site">
+<header class="top"><a href="../" class="back">← Bell · 双人版</a><span class="brand">C-GAMES / BELL</span><button id="rulesButton" class="text-btn" type="button">规则说明</button></header>
+<main>
+ <div class="heading"><p class="eyebrow">BELLS & FRIENDS</p><h1>人齐了，就开玩。<span>✳</span></h1><p>几个人，一张桌子。叫上朋友，报上昵称，等大家准备好。</p></div>
+ <section id="welcome" class="panel welcome">
+  <div class="mode-symbol">🔔 <span>♠</span></div>
+  <h2>加入这张游戏桌</h2>
+  <p class="muted">2–8 人同场，手机和电脑都能玩。无需注册。</p>
+  <label for="nickname">你的昵称 <small>只在当前游戏房间显示</small></label>
+  <input id="nickname" class="input" maxlength="16" placeholder="给自己起个名字 · 1–16 字" autocomplete="nickname">
+  <div class="new-room">
+    <label for="capacity">房间人数上限</label>
+    <select id="capacity" class="input"><option value="2">2 人</option><option value="3">3 人</option><option value="4" selected>4 人</option><option value="5">5 人</option><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option></select>
+    <button id="createButton" class="btn primary" type="button">创建多人房间 ↗</button>
+  </div>
+  <div class="or"><span>或通过邀请码加入</span></div>
+  <div class="join-line"><input id="joinCode" class="input" maxlength="12" placeholder="输入房间码" spellcheck="false" autocapitalize="characters"><button id="joinButton" class="btn outline" type="button">加入</button></div>
+  <p class="privacy">私人房间仅靠邀请码限制加入，昵称不等于身份验证。公开信令负责协商 WebRTC 连接；不保存聊天或录音。</p>
+ </section>
+
+ <section id="roomView" class="hidden">
+  <div class="room-bar"><div><span class="status-light" id="networkDot"></span><span id="networkText" role="status">正在连接…</span></div><div class="code-line"><span id="roomCode"></span><button id="copyButton" class="text-btn" type="button">复制邀请</button></div></div>
+  <div class="tabs" role="group" aria-label="游戏玩法">
+    <button type="button" id="classicTab" class="tab selected" aria-pressed="true">🍓 德国心脏病</button>
+    <button type="button" id="panTab" class="tab" aria-pressed="false">♠ 潘神心脏病</button>
+  </div>
+  <div class="voice-line"><div><span aria-hidden="true">🎙</span> <span id="voiceText">语音未开启</span></div><button id="voiceButton" class="btn outline voice" type="button">开启语音</button></div>
+
+  <section id="lobby" class="panel lobby">
+    <div class="section-head"><div><p class="eyebrow">WAITING ROOM</p><h2>等大家坐下，一起准备。</h2></div><span class="mini-pill" id="lobbyCount">1 / 4 人</span></div>
+    <p class="muted">你的昵称、在线状态和准备情况会同步给房间里的所有人。</p>
+    <div id="roster" class="roster" aria-live="polite"></div>
+    <p id="lobbyHint" class="lobby-hint" role="status">把邀请码发给朋友吧。</p>
+    <div class="actions"><button id="readyButton" type="button" class="btn primary" disabled>我准备好了</button><button id="startButton" type="button" class="btn primary hidden" disabled>等待大家准备</button></div>
+    <p class="tiny" id="hostNote">大家都点准备后由房主开局。人数不足 2 人无法开始。</p>
+  </section>
+  
+  <section id="playing" class="hidden">
+    <div class="game-head"><div><p class="eyebrow">ON THE TABLE</p><h2 id="gameTitle">德国心脏病</h2></div><div class="time-wrap"><span id="roundLabel">抢铃游戏</span><strong id="clock">—</strong></div></div>
+    <div id="gameBoard" class="game-board" aria-label="场上每人的明牌"></div>
+    <div class="bell-dock">
+      <button id="bellButton" class="bell" type="button" disabled aria-label="抢铃">🔔</button>
+      <div class="dock-actions"><p id="gameMessage" aria-live="polite">等待翻牌…</p><button id="flipButton" type="button" class="btn primary" disabled>翻一张牌</button></div>
+    </div>
+    <div class="game-bottom"><div id="scoreboard" class="scores"></div><button id="resetButton" type="button" class="btn outline">返回准备房间</button></div>
+    <p class="tiny">电脑用 Enter 翻牌、空格抢铃；手机点大铃铛。抢铃由房主端统一裁决。</p>
+  </section>
+ </section>
+</main>
+<footer>Bell Multiplayer · 私人聚会式小游戏 · <a href="../">回到双人经典版</a></footer>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="rulesDialog" class="rules"><button id="closeRules" type="button" class="close">×</button>
+ <p class="eyebrow">HOW TO PLAY</p><h2>两种心脏病，一张桌子</h2>
+ <p><strong>德国心脏病：</strong>56 张水果牌均分给 2–8 人。每人轮流翻牌，只看每人面前最新翻出的牌；任何一种水果总量<strong>恰好 5</strong>，全员可抢铃。抢中收走场上全部明牌；误拍赔一张牌给下一位仍在场的玩家。</p>
+ <p><strong>潘神心脏病：</strong>54 张扑克牌均分给 2–8 人（不整除时，部分玩家会多一张）。出现 7、J、Q、K 或大小王，或者<strong>所有玩家面前的数字明牌之和是 7 的正倍数</strong>，即可拍铃。抢对 +2 分并收牌，抢错 −1 分并赔牌；3 分钟到时按积分、持牌数依次判定。</p>
+ <p>任何模式：只有房间内至少两个人，且所有人准备好，房主才能开局；中途有人退出则返回准备房间，以免牌局产生不同步。游戏是休闲玩法，抢铃竞速受网络延迟影响。</p>
+ <p class="muted">多人语音采用浏览器间 WebRTC 网状连接，4 人以上尤其可能受带宽、手机性能及网络限制影响；无法稳定通话时可使用外部语音。</p>
+ <button id="gotIt" class="btn primary" type="button">知道了</button>
+</dialog>
+</body>
+</html>
