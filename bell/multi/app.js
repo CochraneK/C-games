@@ -39,7 +39,7 @@ function toHost(data){
  return false;
 }
 function roomPacket(type='roster'){return {type,kind,phase,capacity,members:members.map(m=>({...m})),state:view};}
-function sendRoster(){broadcast(roomPacket());render();}
+function sendRoster(){broadcast(roomPacket());render();syncCalls();}
 function sendGame(){if(role!=='host')return;view=game?Core.snapshot(game):null;broadcast(roomPacket('state'));render();}
 function resetLobby(){
  phase='lobby';for(const m of members)m.ready=false;
