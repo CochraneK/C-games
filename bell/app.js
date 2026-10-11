@@ -1,6 +1,7 @@
 (() => {
 'use strict';
-const C=window.BellCore;
+let C=window.BellCore;
+let gameKind='classic';
 const $=id=>document.getElementById(id);
 const FRUIT={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 const PREFIX='cochranek-belltogether-v1-';
@@ -27,10 +28,53 @@ function selfSeat(){return mode==='guest'?1:0;}
 function share(){return room?urlOf(room,true):window.location.href;}
 function send(data){if(conn&&conn.open){try{conn.send(data);return true;}catch(e){toast('发送失败，请检查连接');}}return false;}
 function snapshot(){return game?C.snapshot(game):null;}
-function broadcast(){if(mode==='host'&&game)send({type:'state',state:snapshot()});}
+function broadcast(){if(mode==='host'&&game)send({type:'state',kind:gameKind,state:snapshot()});}
 function apply(next){game=next;view=snapshot();render();broadcast();scheduleBot();}
+
+function updatePanClock(){
+ const box=$('panClock');
+ if(!box||gameKind!=='pan')return;
+ const remaining=view?.deadline&&view.phase==='playing'?Math.max(0,view.deadline-Date.now()):0;
+ const sec=Math.ceil(remaining/1000);
+ box.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
+}
+function selectGame(kind,fromRemote=false){
+ if(!['classic','pan'].includes(kind)||kind===gameKind)return;
+ gameKind=kind; C=gameKind==='pan'?window.PanCore:window.BellCore;
+ pending=null;clearTimeout(practiceBotTimer);clearTimeout(botBellTimer);
+ if(fromRemote){game=null;view=null;render();return;}
+ resetGame();
+ toast(kind==='pan'?'潘神心脏病 · 双人计时赛开始':'切换回德国心脏病');
+}
+function requestGame(kind){
+ if(kind===gameKind||!['classic','pan'].includes(kind))return;
+ if(mode==='guest'){
+   if(!conn?.open){toast('等待房主重新连接');return;}
+   send({type:'switch-request',kind});toast('已请求房主切换玩法');return;
+ }
+ if(window.confirm('切换玩法会开始新的一局，但语音保持连接。确定切换吗？'))selectGame(kind);
+}
 function render(){
  const s=view;
+ const pan=gameKind==='pan';
+ document.body.classList.toggle('pan-mode',pan);
+ $('tabClassic').classList.toggle('selected',!pan);
+ $('tabPan').classList.toggle('selected',pan);
+ $('tabClassic').setAttribute('aria-pressed',String(!pan));
+ $('tabPan').setAttribute('aria-pressed',String(pan));
+ $('panSummary').classList.toggle('hidden',!pan);
+ $('gameTitle').innerHTML=pan?'潘神心脏病<span class="sparkle">♠</span>':'叮！一起玩<span class="sparkle">✳</span>';
+ $('gameLead').textContent=pan?'逢 7、整 7、J Q K 和大小王，快一步拍铃！':'看见恰好五个同种水果，就先一步按响铃铛。';
+ $('gameHint').textContent=pan?'A=1，数字牌相加逢 7 的倍数可拍；任一张是 7、J、Q、K 或王也可拍。空格抢铃，回车翻牌。':'轮到你时点“翻一张牌”或按 Enter。谁都可以随时抢铃。';
+ if(pan){
+  const seat=selfSeat(),other=1-seat;
+  $('panYouScore').textContent=s?.scores?.[seat]??0;
+  $('panOtherScore').textContent=s?.scores?.[other]??0;
+  $('panYouHits').textContent='拍中 '+(s?.hits?.[seat]??0)+' · 误拍 '+(s?.fouls?.[seat]??0);
+  $('panOtherHits').textContent='拍中 '+(s?.hits?.[other]??0)+' · 误拍 '+(s?.fouls?.[other]??0);
+  updatePanClock();
+ }
+
  const seat=selfSeat();
  if(room)dom.roomLabel.textContent='房间 '+room;
  dom.copy.classList.toggle('hidden',!room);
@@ -43,7 +87,24 @@ function render(){
   const card=$('card'+i);
   const top=s&&s.piles[i].top;
   card.classList.toggle('active-card',Boolean(top));
-  if(top&&FRUIT[top.fruit]&&Number.isInteger(top.count)&&top.count>=1&&top.count<=5){
+  card.classList.toggle('poker-card',pan);
+  card.classList.remove('poker-red','poker-joker');
+  if(pan&&top&&Number.isInteger(top.rank)&&top.rank>=0&&top.rank<=13){
+   card.replaceChildren();
+   const label=document.createElement('strong');
+   const suit=document.createElement('span');
+   const foot=document.createElement('small');
+   const rank=top.rank;
+   label.className='poker-rank';
+   suit.className='poker-suit';
+   foot.className='poker-foot';
+   label.textContent=rank===0?'王':rank===1?'A':rank===11?'J':rank===12?'Q':rank===13?'K':String(rank);
+   suit.textContent=rank===0?(top.suit==='RED'?'🃏':'✦'):top.suit;
+   foot.textContent=rank===0?(top.suit==='RED'?'RED JOKER':'BLACK JOKER'):'PAN HEART';
+   if(rank===0)card.classList.add('poker-joker');
+   if(top.suit==='♥'||top.suit==='♦'||top.suit==='RED')card.classList.add('poker-red');
+   card.append(label,suit,foot);
+  }else if(!pan&&top&&FRUIT[top.fruit]&&Number.isInteger(top.count)&&top.count>=1&&top.count<=5){
     card.replaceChildren();const grid=document.createElement('div');grid.className='fruit-grid count-'+top.count;
     for(let k=0;k<top.count;k++){const fruit=document.createElement('span');fruit.textContent=FRUIT[top.fruit];grid.appendChild(fruit);}
     card.appendChild(grid);
@@ -59,7 +120,7 @@ function render(){
  dom.bell.disabled=!canAct()||ended||!!pending?.attempts.has(seat);
  dom.restart.disabled=mode==='guest'?!Boolean(conn&&conn.open):mode==='host'?!Boolean(conn&&conn.open):mode!=='practice';
  dom.flip.innerHTML=ended?'本局已结束':hasTurn?'翻一张牌 <span>↗</span>':mode==='practice'?'等对手翻牌':'等待对方翻牌';
- $('bellCaption').textContent=pending?'比拼反应中…':'抢铃 · 空格';
+ $('bellCaption').textContent=pending?'比拼反应中…':pan?'抢拍 · 空格':'抢铃 · 空格';
  if(!canAct()&&!ended){dom.flip.disabled=true;dom.bell.disabled=true;}
 }
 function playBell(){
@@ -195,7 +256,7 @@ function attachConnection(c){
   if(c!==conn){c.close();return;}
   retryCount=0;
   if(mode==='host'){
-    setReady(true);status('双方已连接','live');send({type:'welcome',state:snapshot()});toast('对方到啦！现在可以翻牌了');
+    setReady(true);status('双方已连接','live');send({type:'welcome',kind:gameKind,state:snapshot()});toast('对方到啦！现在可以翻牌了');
     if(mic&&voiceEnabled)send({type:'voice-ready'});
   }else{
     status('已经连上房主','live');send({type:'hello'});
@@ -220,14 +281,19 @@ function attachConnection(c){
 function onData(data){
  if(!data||typeof data!=='object'||typeof data.type!=='string')return;
  if(mode==='host'){
-  if(data.type==='hello')send({type:'welcome',state:snapshot()});
+  if(data.type==='hello')send({type:'welcome',kind:gameKind,state:snapshot()});
   if(data.type==='flip')handleFlip(1);
   if(data.type==='bell')attemptBell(1);
+  if(data.type==='switch-request'&&['classic','pan'].includes(data.kind)&&data.kind!==gameKind){
+    if(window.confirm('对方提议切换到'+(data.kind==='pan'?'潘神心脏病':'德国心脏病')+'。切换会重开一局，语音继续。要同意吗？'))selectGame(data.kind);
+    else send({type:'notice',text:'房主暂时没有切换玩法'});
+  }
   if(data.type==='reset-request'){
     if(window.confirm('对方想重新开始一局。要同意吗？')){resetGame();toast('已经重新开始');}else send({type:'notice',text:'房主暂时没有重新开局'});
   }
  }else if(mode==='guest'){
   if((data.type==='welcome'||data.type==='state')&&validSnapshot(data.state)){
+    if(['classic','pan'].includes(data.kind)&&data.kind!==gameKind)selectGame(data.kind,true);
     view=data.state;setReady(true);status('双方已连接','live');render();
     if(data.type==='welcome')toast('连接成功，准备抢铃吧');
     if(data.type==='state'&&view?.last?.includes('抢铃成功'))playBell();
@@ -311,7 +377,11 @@ async function copyInvite(){
  catch(e){window.prompt('复制下面的邀请链接：',link);}
 }
 function closeRules(){$('rulesModal').classList.add('hidden');}
-function showRules(){$('rulesModal').classList.remove('hidden');}
+function showRules(){
+ $('classicRules').classList.toggle('hidden',gameKind!=='classic');
+ $('panRules').classList.toggle('hidden',gameKind!=='pan');
+ $('rulesModal').classList.remove('hidden');
+}
 dom.host.addEventListener('click',()=>connectRoom(true,randomRoom()));
 dom.practice.addEventListener('click',startPractice);
 dom.join.addEventListener('click',()=>{
@@ -325,6 +395,16 @@ dom.flip.addEventListener('click',doFlip);
 dom.bell.addEventListener('click',doBell);
 dom.restart.addEventListener('click',restart);
 dom.voice.addEventListener('click',toggleVoice);
+$('tabClassic').addEventListener('click',()=>requestGame('classic'));
+$('tabPan').addEventListener('click',()=>requestGame('pan'));
+setInterval(()=>{
+ if(gameKind!=='pan'||dom.gameArea.classList.contains('hidden'))return;
+ if((mode==='host'||mode==='practice')&&game?.phase==='playing'){
+  const result=window.PanCore.finish(game);
+  if(result.ok){pending=null;apply(result.state);}
+ }
+ updatePanClock();
+},300);
 $('helpButton').addEventListener('click',showRules);
 $('closeRules').addEventListener('click',closeRules);
 $('rulesGotIt').addEventListener('click',closeRules);
