@@ -10,7 +10,7 @@ test('Deck counts + distribution for 2 to 8 players',()=>{
   assert.ok(Math.max(...g.hands.map(h=>h.length))-Math.min(...g.hands.map(h=>h.length))<=1);
  }
 });
-test('Every player's exposed fruits are included',()=>{
+test("Every player's exposed fruits are included",()=>{
  const g=C.create('classic',5,()=>.42,0);
  g.piles=[[{fruit:'banana',count:1}],[],[{fruit:'banana',count:2}],[],[{fruit:'banana',count:2}]];
  assert.equal(C.target(g).yes,true);
