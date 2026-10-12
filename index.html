@@ -29,6 +29,7 @@ a.game:active{transform:translateY(0)}
 .art{height:235px;position:relative;display:flex;align-items:center;justify-content:center;isolation:isolate}
 .art.snake{background:radial-gradient(circle at 63% 37%,#e2f3dc 0,#c9e1c7 54%,#bfd8c5 100%)}
 .art.bell{background:radial-gradient(circle at 58% 33%,#fff0d9 0,#f0dec6 58%,#eacdbb 100%)}
+.art.turtle{background:radial-gradient(circle at 58% 33%,#fef2dd 0,#f3e3c8 58%,#ecd5b6 100%)}
 .art::before{content:"";position:absolute;inset:23px;border:1px solid #ffffff88;border-radius:18px;pointer-events:none}
 .art svg{max-width:75%;height:86%;filter:drop-shadow(0 13px 11px #31472d27)}
 .art .tag{position:absolute;top:20px;left:22px;border:1px solid #ffffff80;background:#ffffffa8;padding:6px 10px;border-radius:22px;font-size:11px;color:#496253;backdrop-filter:blur(3px)}
@@ -65,7 +66,7 @@ footer a:hover{text-decoration:underline}
   <section class="intro">
     <div class="eyebrow">WELCOME TO THE TABLE</div>
     <h1>想玩，就<span>玩一会儿。</span></h1>
-    <p class="subtitle">不必下载，不必注册。自己玩一局贪吃蛇，或者邀请朋友，一起抢铃铛。</p>
+    <p class="subtitle">不必下载，不必注册。自己玩一局贪吃蛇，或者邀请朋友，抢铃铛、喝一碗海龟汤。</p>
   </section>
   <nav class="cards" aria-label="选择游戏">
     <a class="game" href="./snake/" aria-label="进入贪吃蛇游戏">
@@ -96,6 +97,22 @@ footer a:hover{text-decoration:underline}
         </svg>
       </div>
       <div class="info"><div class="title-row"><h2>Bell · 心脏病</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">德国心脏病与潘神心脏病。既能双人玩，也能邀请 2–8 人同桌，昵称、准备和抢铃实时同步。</p><div class="chips"><span>2–8 人联机</span><span>语音可选</span><span>单人练习</span></div></div>
+    </a>
+    <a class="game" href="./turtle/" aria-label="进入海龟汤游戏">
+      <div class="art turtle">
+        <span class="tag">03 · 2–8 人</span>
+        <svg viewBox="0 0 420 240" role="img" aria-label="一碗海龟汤">
+          <ellipse cx="210" cy="202" rx="92" ry="14" fill="#806a47" opacity=".18"/>
+          <path d="M122 132 Q122 196 210 196 Q298 196 298 132 Z" fill="#f0e0c4" stroke="#c9a86a" stroke-width="4"/>
+          <ellipse cx="210" cy="132" rx="88" ry="22" fill="#caa86a" stroke="#a87833" stroke-width="3"/>
+          <ellipse cx="210" cy="130" rx="70" ry="15" fill="#e7c98f"/>
+          <path d="M168 70 Q176 52 168 36 Q160 52 168 70" fill="none" stroke="#cdbb9a" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+          <path d="M210 64 Q220 44 210 26 Q200 44 210 64" fill="none" stroke="#cdbb9a" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+          <path d="M252 70 Q260 52 252 36 Q244 52 252 70" fill="none" stroke="#cdbb9a" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+          <circle cx="186" cy="126" r="5" fill="#9a7b3f"/><circle cx="232" cy="132" r="5" fill="#9a7b3f"/>
+        </svg>
+      </div>
+      <div class="info"><div class="title-row"><h2>Turtle Soup · 海龟汤</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">房主端出离奇汤面，大家轮流提问，房主只回「是 / 不是 / 与此无关」，慢慢拼出真相。2–8 人联机，可开麦。</p><div class="chips"><span>2–8 人联机</span><span>语音可选</span><span>情境推理</span></div></div>
     </a>
   </nav>
   <footer><span>© C-games · Play for a while.</span><a href="https://github.com/CochraneK/C-games">GitHub ↗</a></footer>

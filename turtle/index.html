@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3eee5">
+<meta name="description" content="海龟汤（情境猜谜）：2–8 人同房间，房主出题设谜底，玩家对话推理，房主用「是/不是/与此无关」回答。">
+<title>Turtle Soup · 海龟汤 · C-games</title>
+<link rel="stylesheet" href="./style.css">
+<script defer src="./core.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<div class="site">
+<header class="top"><a href="../" class="back">← 回到所有游戏</a><span class="brand">C-GAMES / TURTLE</span><button id="rulesButton" class="text-btn" type="button">怎么玩</button></header>
+<main>
+ <div class="heading"><p class="eyebrow">TURTLE SOUP · 海龟汤</p><h1>一锅汤，问到底。<span>🥣</span></h1><p>房主端出一桩离奇的「汤面」，大家轮流提问，房主只回「是 / 不是 / 与此无关」，慢慢拼出真相。</p></div>
+
+ <section id="welcome" class="panel welcome">
+  <div class="mode-symbol">🥣</div>
+  <h2>开一桌海龟汤</h2>
+  <p class="muted">2–8 人同场，手机和电脑都能玩。无需注册，房主负责出题。</p>
+  <label for="nickname">你的昵称 <small>只在当前房间显示</small></label>
+  <input id="nickname" class="input" maxlength="16" placeholder="给自己起个名字 · 1–16 字" autocomplete="nickname">
+  <div class="new-room">
+    <label for="capacity">房间人数上限</label>
+    <select id="capacity" class="input"><option value="2">2 人</option><option value="3">3 人</option><option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人</option><option value="7">7 人</option><option value="8" selected>8 人</option></select>
+    <button id="createButton" class="btn primary" type="button">创建房间 ↗</button>
+  </div>
+  <div class="or"><span>或通过邀请码加入</span></div>
+  <div class="join-line"><input id="joinCode" class="input" maxlength="12" placeholder="输入房间码" spellcheck="false" autocapitalize="characters"><button id="joinButton" class="btn outline" type="button">加入</button></div>
+  <p class="privacy">私人房间仅靠邀请码限制加入，昵称不等于身份验证。公开信令负责协商 WebRTC 连接；不保存聊天或谜底。</p>
+ </section>
+
+ <section id="roomView" class="hidden">
+  <div class="room-bar"><div><span class="status-light" id="networkDot"></span><span id="networkText" role="status">正在连接…</span></div><div class="code-line"><span id="roomCode"></span><button id="copyButton" class="text-btn" type="button">复制邀请</button></div></div>
+  <div class="voice-line"><div><span aria-hidden="true">🎙</span> <span id="voiceText">语音未开启</span></div><button id="voiceButton" class="btn outline voice" type="button">开启语音</button></div>
+
+  <section id="lobby" class="panel lobby">
+    <div class="section-head"><div><p class="eyebrow">WAITING ROOM</p><h2>等朋友坐下，房主出题。</h2></div><span class="mini-pill" id="lobbyCount">1 / 8 人</span></div>
+    <div id="roster" class="roster" aria-live="polite"></div>
+    <p id="lobbyHint" class="lobby-hint" role="status">把邀请码发给朋友吧。</p>
+
+    <div id="hostSetup" class="setup hidden">
+      <p class="eyebrow">出题 · 只有房主能看到谜底</p>
+      <label for="surfaceInput">汤面 <small>一个离奇的场景，让玩家想问「为什么」</small></label>
+      <textarea id="surfaceInput" class="input" rows="3" maxlength="400" placeholder="例如：一个人走进餐厅点了一碗海龟汤，喝了一口就回家自杀了。"></textarea>
+      <label for="answerInput">谜底 <small>真相，仅房主可见</small></label>
+      <textarea id="answerInput" class="input" rows="2" maxlength="400" placeholder="例如：他曾在海难中吃过人肉，那碗汤让他意识到当年吃的是妻子。"></textarea>
+      <div class="actions"><button id="startButton" class="btn primary" type="button" disabled>开始这局</button></div>
+    </div>
+
+    <div id="guestWait" class="wait hidden">
+      <p class="muted">等房主出题。房主设好谜底后，汤面会立刻出现在这里。</p>
+    </div>
+  </section>
+
+  <section id="playing" class="hidden">
+    <div class="game-head"><div><p class="eyebrow">ON THE TABLE</p><h2>海龟汤 · 推理中</h2></div><span class="mini-pill" id="progressText">0 问 · 0 答</span></div>
+    <div class="surface-card"><span class="surface-label">汤面</span><p id="surfaceText"></p></div>
+
+    <div id="hostAnswer" class="host-answer hidden">
+      <span class="surface-label">谜底（仅你可见）</span>
+      <p id="answerText"></p>
+      <div class="actions"><button id="revealButton" class="btn outline" type="button">直接翻牌公布</button></div>
+    </div>
+
+    <div id="truthCard" class="surface-card truth hidden">
+      <span class="surface-label">真相揭晓</span>
+      <p id="truthText"></p>
+    </div>
+
+    <div id="messages" class="messages" aria-live="polite"></div>
+
+    <div class="composer">
+      <select id="msgKind" class="input kind">
+        <option value="ask">提问</option>
+        <option value="say">闲聊</option>
+        <option value="hint">提示</option>
+        <option value="solve">猜底</option>
+      </select>
+      <textarea id="msgInput" class="input" rows="1" maxlength="400" placeholder="说点什么…（回车发送）"></textarea>
+      <button id="sendButton" class="btn primary" type="button">发送</button>
+    </div>
+    <p class="tiny">提问由房主回答「是 / 不是 / 与此无关」；点「猜底」让房主判定你是否说中真相。语音采用浏览器间 WebRTC 连接，受网络影响。</p>
+  </section>
+ </section>
+</main>
+<footer>Turtle Soup · 海龟汤情境猜谜 · <a href="../">回到所有游戏</a></footer>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="rulesDialog" class="rules"><button id="closeRules" type="button" class="close">×</button>
+ <p class="eyebrow">HOW TO PLAY</p><h2>一锅汤，问到底</h2>
+ <p><strong>房主：</strong>写下一个离奇的「汤面」（场景），再写下隐藏的「谜底」（真相）。谜底只有房主自己看得到。</p>
+ <p><strong>所有人：</strong>围着汤面轮流对话。用「提问」抛出一个可以判断是非的问题，房主只能回三种标准答案——<strong>是 / 不是 / 与此无关</strong>。也可以用「闲聊」陈述推理、「提示」让房主给方向、或「猜底」直接说出你认定的真相。</p>
+ <p><strong>收尾：</strong>谁「猜底」被房主判为命中，谁就赢；房主也可以随时「直接翻牌」公布谜底。2–8 人同场，中途有人离开会回到等待房主出题。</p>
+ <p class="muted">私人聚会式小游戏，联机依赖公开信令协商 WebRTC；如语音不稳定可用外部语音。</p>
+ <button id="gotIt" class="btn primary" type="button">知道了</button>
+</dialog>
+</body>
+</html>
