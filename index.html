@@ -41,6 +41,11 @@ a.game:hover .arrow{transform:translateX(5px)}
 .description{font-size:13px;line-height:1.8;color:var(--sub);margin:12px 0 17px;min-height:47px}
 .chips{display:flex;flex-wrap:wrap;gap:7px}
 .chips span{font-size:11px;border-radius:6px;background:#f3f1e8;padding:5px 9px;color:#677568}
+/* 卡片内部的「次级入口」：不能用 <a>，否则整张卡片 <a class="game"> 里嵌套 <a>，
+   浏览器会自动提前闭合外层 <a>，把 .info 甩到锚点外并多出一个 anchor。改用 span + JS 跳转。 */
+.chips span.chip-link{cursor:pointer;color:var(--green-deep);font-weight:600;background:#e8efe5}
+.chips span.chip-link:hover{text-decoration:underline;background:#dde8db}
+.chips span.chip-link:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 footer{display:flex;justify-content:space-between;gap:15px;align-items:center;color:#929a8f;font-size:11px;border-top:1px solid #dedfd6;margin-top:70px;padding-top:23px}
 footer a{color:inherit;text-decoration:none}
 footer a:hover{text-decoration:underline}
@@ -71,7 +76,7 @@ footer a:hover{text-decoration:underline}
   <nav class="cards" aria-label="选择游戏">
     <a class="game" href="./snake/" aria-label="进入贪吃蛇游戏">
       <div class="art snake">
-        <span class="tag">01 · SOLO</span>
+        <span class="tag">01 · 单人 · 联机</span>
         <svg viewBox="0 0 420 240" role="img" aria-label="蜿蜒的绿色贪吃蛇">
           <path d="M65 155 H112 Q132 155 132 135 V87 Q132 65 155 65 H260 Q280 65 280 88 V150 Q280 172 303 172 H341" fill="none" stroke="#779f86" stroke-width="55" stroke-linecap="round" stroke-linejoin="round" opacity=".35"/>
           <path d="M65 155 H112 Q132 155 132 135 V87 Q132 65 155 65 H260 Q280 65 280 88 V150 Q280 172 303 172 H341" fill="none" stroke="#3b745b" stroke-width="37" stroke-linecap="round" stroke-linejoin="round"/>
@@ -81,7 +86,7 @@ footer a:hover{text-decoration:underline}
           <circle cx="94" cy="58" r="4" fill="#eaf7dd"/><circle cx="327" cy="58" r="4" fill="#eaf7dd"/>
         </svg>
       </div>
-      <div class="info"><div class="title-row"><h2>Snake · 贪吃蛇</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">四个熟悉的版本：苏络、77、北京地铁和南京地铁。找回自己的路线，慢慢玩。</p><div class="chips"><span>单人</span><span>文字蛇</span><span>地铁探索</span><span><a href="./play.html?mode=ladder" style="text-decoration:none;color:inherit">地铁晋级赛 ↗</a></span></div></div>
+      <div class="info"><div class="title-row"><h2>Snake · 贪吃蛇</h2><span class="arrow" aria-hidden="true">↗</span></div><p class="description">四个熟悉的版本：苏络、77、北京地铁和南京地铁。找回自己的路线，慢慢玩；也能开房间叫上朋友一起跑，边跑边开麦。</p><div class="chips"><span>单人</span><span>2–8 人联机</span><span>语音可选</span><span>文字蛇</span><span>地铁探索</span><span class="chip-link" data-go="./play.html?mode=ladder" role="link" tabindex="0">地铁晋级赛 ↗</span></div></div>
     </a>
     <a class="game" href="./bell/" aria-label="进入双人心脏病游戏">
       <div class="art bell">
@@ -116,6 +121,21 @@ footer a:hover{text-decoration:underline}
     </a>
   </nav>
   <footer><span>© C-games · Play for a while.</span><a href="https://github.com/CochraneK/C-games">GitHub ↗</a></footer>
+<script>
+/* 卡片内的次级入口（如「地铁晋级赛」）：整张卡片已经是 <a class="game">，
+   内部再嵌 <a> 属于非法嵌套，浏览器会自动提前闭合外层 <a>（把 .info 甩到锚点外、并多出一个 anchor）。
+   这里改用 span[data-go] + JS 跳转，点击时阻止冒泡，避免连带触发卡片的默认跳转。 */
+(function(){
+  function go(el){ var t=el.getAttribute('data-go'); if(t) location.href=t; }
+  var links=document.querySelectorAll('.chip-link');
+  for(var i=0;i<links.length;i++)(function(el){
+    el.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); go(el); });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){ e.preventDefault(); e.stopPropagation(); go(el); }
+    });
+  })(links[i]);
+})();
+</script>
 </main>
 </body>
 </html>
