@@ -4379,6 +4379,13 @@ window.__SNAKE__={
   snakes:function(){ return snakes.length; },
 /* 只读探针：在场蛇的线路占用（当班制自检用） */
 snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!s.isPlayer,alive:!!s.alive,lineIdx:s.lineIdx};}); },
+  /* 联机叠加层只读探针：暴露相机变换，使外部脚本能用与引擎完全一致的 sx/sy 把世界坐标画到叠加画布上（纯读取，不改任何状态） */
+  cam:function(){ return {camX:camX, camY:camY, VCOLS:VCOLS, VROWS:VROWS, CELL:CELL, WCOLS:WCOLS, WROWS:WROWS}; },
+  /* 本地玩家蛇头世界坐标（广播给同房其他人画影子蛇用） */
+  playerHead:function(){ if(!player||!player.body||!player.body.length) return null;
+    return {x:player.body[0].x, y:player.body[0].y, dir:{x:player.dir.x, y:player.dir.y}}; },
+  /* 卡片暂停状态（联机时用于「暂停读卡不相撞」的展示判断） */
+  cardPaused:function(){ return !!(cardPaused); },
   /* 机制③：成就大图自检 —— 布局是否有效、点亮数对不对 */
   net:function(){
     var g=getNet(), bad=0, i;
@@ -4493,6 +4500,387 @@ snakeLines:function(){ return snakes.map(function(s){return {id:s.id,isPlayer:!!
   ladderPlayable:function(){ var n=0; LADDER.regions.forEach(function(R){ R.cities.forEach(function(c){ if(c.theme) n++; }); }); return n; },
   ladderClearedCity:function(city){ var c=null; LADDER.regions.forEach(function(R){ R.cities.forEach(function(ci){ if(ci.city===city) c=ci; }); }); return c?ladderCityCleared(c):false; }
 };
+})();
+</script>
+<script>
+/* ===== 贪吃蛇联机：房主授权房间 + WebRTC 语音 + 影子蛇叠加 =====
+   设计要点：
+   - 这是「叠加层」玩法，只读 window.__SNAKE__ 探针，绝不修改引擎状态；
+   - 暂停读卡片时引擎本就停 tick（paused），本地蛇冻结；叠加层只做可视化、不写任何游戏状态
+     → 「玩家相撞没关系」天然成立（跨客户端不掉血/不掉线/不改分数）。
+   - 真实玩家 = 叠加层里的白圈+名字影子蛇；AI 蛇由引擎在 #game 上绘制（无白圈）。
+   - 无头冒烟测试：本脚本顶层不触碰 crypto / PeerJS / navigator.mediaDevices / requestAnimationFrame，
+     只用 setInterval（在自检里是 no-op），故不会让 play.html 的自检报错。 */
+(function(){
+  'use strict';
+  var S=window.__SNAKE__;
+  if(!S||typeof document==='undefined'||!document.getElementById) return;
+
+  var $=function(id){return document.getElementById(id);};
+  function cleanName(raw){return String(raw==null?'':raw).replace(/[\u0000-\u001f\u007f<>]/g,'').trim().replace(/\s+/g,' ').slice(0,16);}
+  function pickHead(){ if(document.head&&document.head.appendChild) return document.head;
+    if(document.documentElement&&document.documentElement.appendChild) return document.documentElement; return document.body; }
+
+  /* 随机线路调色板（每个人加入随机给一条） */
+  var LINES=[
+    {name:'1号线',color:'#e23b3b'},{name:'2号线',color:'#2f6fe0'},
+    {name:'3号线',color:'#e0a52f'},{name:'4号线',color:'#36a85a'},
+    {name:'5号线',color:'#9b3fd0'},{name:'6号线',color:'#d04fa0'},
+    {name:'7号线',color:'#1f9b9b'},{name:'8号线',color:'#c8632f'},
+    {name:'9号线',color:'#5b6bce'},{name:'10号线',color:'#b0b020'},
+    {name:'11号线',color:'#d03f6f'},{name:'12号线',color:'#3f9bd0'}
+  ];
+  var members=[];
+  function randomLine(){
+    var used={}; members.forEach(function(m){ if(m.line) used[m.line.name]=1; });
+    var pool=LINES.filter(function(l){return !used[l.name];}); if(!pool.length) pool=LINES;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+
+  /* 注入样式 */
+  var css=document.createElement('style');
+  css.textContent=''+
+  '#mpFab{position:fixed;right:10px;bottom:10px;z-index:60;padding:8px 14px;border:none;border-radius:18px;'+
+  'font-family:inherit;font-size:13px;letter-spacing:1px;color:#fff;cursor:pointer;'+
+  'background:linear-gradient(180deg,#2f9b95,#1f6f6b);box-shadow:0 3px 0 #14524f;}'+
+  '#mpPanel{position:fixed;right:10px;bottom:54px;z-index:60;width:286px;max-width:92vw;'+
+  'background:rgba(250,246,236,.98);border:1px solid #d8cfbd;border-radius:14px;'+
+  'box-shadow:0 10px 30px rgba(60,50,30,.25);padding:12px;font-size:13px;color:#26262a;'+
+  'font-family:"STKaiti","KaiTi","楷体",serif;}'+
+  '#mpPanel.hidden{display:none;}'+
+  '#mpPanel h3{margin:0 0 8px;font-size:15px;letter-spacing:1px;}'+
+  '#mpPanel input{width:100%;box-sizing:border-box;padding:6px 9px;margin:4px 0;border-radius:9px;'+
+  'border:1px solid #d8cfbd;font-family:inherit;font-size:13px;}'+
+  '#mpPanel .mp-row{display:flex;gap:6px;margin-top:6px;}'+
+  '#mpPanel button{flex:1;padding:7px 0;border:none;border-radius:11px;font-family:inherit;'+
+  'font-size:13px;letter-spacing:1px;color:#fff;cursor:pointer;'+
+  'background:linear-gradient(180deg,#2f9b95,#1f6f6b);box-shadow:0 2px 0 #14524f;}'+
+  '#mpPanel button.ghost{background:linear-gradient(180deg,#b9ab8c,#9c8d6c);box-shadow:0 2px 0 #6f6248;}'+
+  '#mpPanel button:disabled{opacity:.5;}'+
+  '#mpRoom{font-weight:700;color:#1f6f6b;letter-spacing:2px;}'+
+  '#mpMembers{margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;}'+
+  '.mp-seat{display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:9px;background:#fff;border:1px solid #ece3d2;}'+
+  '.mp-dot{width:12px;height:12px;border-radius:50%;flex:none;}'+
+  '.mp-seat .nm{font-weight:700;}'+
+  '.mp-seat .ln{margin-left:auto;font-size:11px;color:#5d5850;}'+
+  '.mp-seat .vc{font-size:11px;}'+
+  '#mpStatus{margin-top:8px;font-size:11px;color:#5d5850;}'+
+  '#mpToast{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:80;'+
+  'background:rgba(38,38,42,.92);color:#fff;padding:8px 16px;border-radius:16px;font-size:13px;'+
+  'letter-spacing:1px;opacity:0;transition:opacity .25s;pointer-events:none;font-family:inherit;}'+
+  '#mpToast.show{opacity:1;}'+
+  '#mpOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;}'+
+  '.mp-tip{font-size:11px;color:#5d5850;line-height:1.6;margin-top:6px;}'+
+  '.mp-tip b{color:#1f6f6b;}';
+  (function(){var h=pickHead(); if(h) h.appendChild(css);})();
+
+  /* 注入面板 DOM */
+  var fab=document.createElement('button'); fab.id='mpFab'; fab.textContent='联机';
+  var panel=document.createElement('div'); panel.id='mpPanel'; panel.className='hidden';
+  panel.innerHTML=''+
+    '<h3>贪吃蛇联机</h3>'+
+    '<input id="mpNick" maxlength="16" placeholder="输入昵称，例如 小明" />'+
+    '<div class="mp-row"><button id="mpCreate">创建房间</button><button id="mpJoin" class="ghost">加入房间</button></div>'+
+    '<input id="mpCodeIn" maxlength="12" placeholder="输入 4 位邀请码" style="margin-top:6px;" />'+
+    '<div class="mp-row"><button id="mpInvite" class="ghost">复制邀请链接</button><button id="mpMic" class="ghost">开启语音</button></div>'+
+    '<div id="mpRoom" style="margin-top:8px;"></div>'+
+    '<div id="mpMembers"></div>'+
+    '<div id="mpStatus"></div>'+
+    '<div class="mp-tip">白圈+名字＝真人玩家；蛇身上的电脑蛇是 <b>AI</b>。<br>暂停读卡片时只冻结本地蛇，叠加层不改动任何游戏状态，<b>玩家相撞没关系</b>。</div>'+
+    '<div class="mp-row" style="margin-top:8px;"><button id="mpLeave" class="ghost">离开房间</button></div>';
+  var toastEl=document.createElement('div'); toastEl.id='mpToast';
+  (function(){ var b=document.body; if(b){ b.appendChild(fab); b.appendChild(panel); b.appendChild(toastEl); } })();
+
+  /* 叠加画布：盖在 #game 上，只读渲染影子蛇 */
+  var overlay=null, octx=null;
+  (function(){
+    var g=$('game');
+    if(g&&g.parentNode){ try{ overlay=document.createElement('canvas'); overlay.id='mpOverlay';
+      g.parentNode.insertBefore(overlay, g.parentNode.firstChild);
+      octx=overlay.getContext?overlay.getContext('2d'):null; }catch(_){ overlay=null; } }
+    if(!overlay&&document.body){ try{ overlay=document.createElement('canvas'); overlay.id='mpOverlay';
+      document.body.appendChild(overlay); octx=overlay.getContext?overlay.getContext('2d'):null; }catch(_){ overlay=null; } }
+  })();
+  function syncOverlaySize(){
+    if(!overlay||!octx) return; var g=$('game'); if(!g) return;
+    var cw=g.clientWidth||g.width||800, ch=g.clientHeight||g.height||800;
+    var dpr=(cw>0&&g.width)? g.width/cw : 1;
+    if(overlay.width!==(g.width||Math.round(cw))) overlay.width=g.width||Math.round(cw);
+    if(overlay.height!==(g.height||Math.round(ch))) overlay.height=g.height||Math.round(ch);
+    overlay.style.width=cw+'px'; overlay.style.height=ch+'px';
+    try{ octx.setTransform(dpr,0,0,dpr,0,0); }catch(_){}
+  }
+
+  /* ===== PeerJS 房间（房主授权，星型数据 + 网状语音） ===== */
+  var PREFIX='cgames-snake-mp-v1-';
+  var CODE_RE=/^[A-Z2-9]{4}$/;
+  var role='welcome', code='', myName='', peer=null, connecting=false;
+  var connections=new Map();
+  var mic=null, micOn=false, openingMic=false, mediaCalls=new Map(), audioNodes=new Map();
+  var remote={}, myTrail=[], myLine=null, toastTimer=null;
+  var prevIds=[], prevNames={}, mpBoot=true;
+
+  function status(msg){ var s=$('mpStatus'); if(s) s.textContent=msg; }
+  function toast(msg){ if(!toastEl) return; toastEl.textContent=msg; toastEl.classList.add('show');
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.classList.remove('show'); },3000); }
+  function localId(){ return (peer&&peer.id)||''; }
+  function me(){ return members.findIndex(function(m){return m.peerId===localId();}); }
+  function memberOf(id){ return members.find(function(m){return m.peerId===id;}); }
+  function connected(){ return role==='host'||
+    (role==='guest'&&connections.get(PREFIX+code+'-host')&&connections.get(PREFIX+code+'-host').open&&me()>=0); }
+  function hostSend(id,data){ var c=connections.get(id); if(c&&c.open){ try{ c.send(data); return true; }catch(_){ return false; } } return false; }
+  function broadcast(data){ if(role!=='host') return; members.forEach(function(m,i){ if(i>0) hostSend(m.peerId,data); }); }
+  function toHost(data){ if(role==='guest'){ var c=connections.get(PREFIX+code+'-host'); if(c&&c.open){ try{ c.send(data); return true; }catch(_){} } } return false; }
+  function roomPacket(t){ return {type:t||'roster', members:members.map(function(m){return {peerId:m.peerId,name:m.name,line:m.line,voice:!!m.voice};})}; }
+  function sendRoster(){ broadcast(roomPacket()); render(); syncCalls(); }
+
+  function randomCode(){ var a='ABCDEFGHJKMNPQRSTUVWXYZ23456789', s=''; for(var i=0;i<4;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+  function inviteUrl(){ try{ var u=new URL(location.href); u.search=''; u.hash=''; u.searchParams.set('room',code); return u.toString(); }catch(_){ return location.href||''; } }
+
+  function loadPeerJS(){
+    if(window.Peer) return Promise.resolve();
+    var sources=['https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js','https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js'];
+    return (async function(){
+      for(var i=0;i<sources.length;i++){ var src=sources[i];
+        try{ await new Promise(function(res,rej){
+          var sc=document.createElement('script'); sc.src=src; sc.async=true;
+          var to=setTimeout(function(){ if(sc.parentNode) sc.parentNode.removeChild(sc); rej(Error('timeout')); },9000);
+          sc.onload=function(){ clearTimeout(to); window.Peer?res():rej(Error('PeerJS missing')); };
+          sc.onerror=function(){ clearTimeout(to); if(sc.parentNode) sc.parentNode.removeChild(sc); rej(Error('CDN')); };
+          var h=document.head||document.documentElement; if(h&&h.appendChild) h.appendChild(sc); else if(document.body) document.body.appendChild(sc);
+        }); return; }catch(_){}
+      }
+      throw Error('联机模块加载失败，请检查网络');
+    })();
+  }
+
+  function choose(which){
+    if(connecting) return;
+    var nick=cleanName($('mpNick').value); if(!nick){ toast('先输入昵称'); if($('mpNick')) $('mpNick').focus(); return; }
+    myName=nick; role=which;
+    mpBoot=true; prevIds=[]; prevNames={};
+    if(which==='host'){ code=randomCode(); members=[]; }
+    else { code=($('mpCodeIn').value||'').trim().toUpperCase(); if(!CODE_RE.test(code)){ role='welcome'; toast('邀请码是 4 位字母或数字'); return; } }
+    connecting=true; panel.classList.remove('hidden'); status('连接信令服务中…');
+    try{ if(history&&history.replaceState) history.replaceState(null,'',inviteUrl()); }catch(_){}
+    startPeer();
+  }
+
+  function startPeer(){
+    loadPeerJS().then(function(){
+      var id=role==='host'?PREFIX+code+'-host':undefined;
+      try{ peer=id?new window.Peer(id,{debug:0}):new window.Peer({debug:0}); }
+      catch(e){ status('初始化失败'); toast(String(e)); connecting=false; return; }
+      peer.on('open', function(){
+        connecting=false;
+        if(role==='host'){ myLine=randomLine(); members=[{peerId:peer.id,name:myName,line:myLine,voice:false}];
+          status('房间已创建，邀请朋友加入'); render(); }
+        else joinHost();
+      });
+      peer.on('connection', function(c){
+        if(role!=='host'){ c.close(); return; }
+        c.on('data', function(d){ fromGuest(c,d); });
+        c.on('close', function(){ guestLeft(c); });
+        c.on('error', function(){ guestLeft(c); });
+      });
+      peer.on('call', function(incoming){
+        var m=memberOf(incoming.peer); if(!m||!mic||!micOn||!m.voice){ try{incoming.close();}catch(_){} return; }
+        bindCall(incoming); try{ incoming.answer(mic); }catch(_){}
+      });
+      peer.on('error', function(err){
+        if(err&&err.type==='unavailable-id'&&role==='host') status('邀请码冲突，刷新重开');
+        else if(err&&err.type==='peer-unavailable'&&role==='guest') status('房间不存在或房主离线');
+        else status('连接异常 · '+(err&&err.type||'请检查网络'));
+        toast((err&&err.message)||'连接遇到问题');
+      });
+      peer.on('disconnected', function(){ status('信令中断，重连中…'); if(peer&&!peer.destroyed) peer.reconnect(); });
+    }).catch(function(e){ status('联机不可用'); toast(e.message||'联机模块加载失败'); connecting=false; });
+  }
+
+  function joinHost(){
+    status('加入房间中…');
+    var c=peer.connect(PREFIX+code+'-host',{reliable:true,serialization:'json'});
+    connections.set(PREFIX+code+'-host',c);
+    c.on('open', function(){ c.send({type:'join',name:myName}); });
+    c.on('data', function(d){ fromHost(d); });
+    c.on('close', function(){ status('与房主断开'); members=[]; render(); });
+    c.on('error', function(){ status('连接失败'); toast('进不去这个房间'); });
+  }
+
+  function fromGuest(c,d){
+    if(!d||!d.type) return; var id=c.peer;
+    if(d.type==='join'){
+      if(memberOf(id)){ hostSend(id,roomPacket('welcome')); return; }
+      if(!c.open){ try{c.send({type:'reject',reason:'房间已满'});setTimeout(function(){c.close();},120);}catch(_){} return; }
+      if(members.length>=8){ try{c.send({type:'reject',reason:'房间已满'});setTimeout(function(){c.close();},120);}catch(_){} return; }
+      var name=cleanName(d.name); if(!name){ try{c.close();}catch(_){} return; }
+      connections.set(id,c); var line=randomLine();
+      members.push({peerId:id,name:name,line:line,voice:false});
+      hostSend(id,roomPacket('welcome')); sendRoster();
+      status(members.length+' 人在线');
+      return;
+    }
+    if(!connections.has(id)) return; var idx=members.findIndex(function(m){return m.peerId===id;}); if(idx<1) return;
+    if(d.type==='pos'){ updateGhost(id, d.trail); }
+    else if(d.type==='voice'&&typeof d.enabled==='boolean'){ members[idx].voice=d.enabled; sendRoster(); }
+  }
+
+  function guestLeft(c){
+    var i=members.findIndex(function(m){return m.peerId===c.peer;});
+    if(i<1||connections.get(c.peer)!==c) return;
+    var name=members[i].name; connections.delete(c.peer); dropCall(c.peer); delete remote[c.peer];
+    members.splice(i,1); sendRoster(); status('有玩家离开 · '+members.length+' 人');
+  }
+
+  function fromHost(d){
+    if(!d||!d.type) return;
+    if(d.type==='reject'){ status('无法加入：'+(d.reason||'')); toast(d.reason||'无法加入'); return; }
+    if(d.type==='welcome'||d.type==='roster'){
+      if(!Array.isArray(d.members)) return;
+      members=d.members; render(); syncCalls(); status('已进入房间 · '+members.length+' 人在线');
+      if(d.type==='welcome') toast('入座成功！可以开始移动了');
+    } else if(d.type==='pos'){ if(d.from&&d.from!==localId()) updateGhost(d.from, d.trail); }
+  }
+
+  function updateGhost(id, trail){
+    var m=memberOf(id); if(!m) return;
+    remote[id]={ name:m.name, line:(m.line&&m.line.name)||'', color:(m.line&&m.line.color)||'#888',
+      trail:Array.isArray(trail)?trail.slice(0,12):[], lastSeen:Date.now() };
+  }
+
+  /* ===== 语音（网状） ===== */
+  function broadcastVoice(){ if(role==='host'){ if(members[0]){ members[0].voice=micOn; sendRoster(); } } else toHost({type:'voice',enabled:micOn}); }
+  function dropCall(id){ var c=mediaCalls.get(id); if(c){ mediaCalls.delete(id); try{c.close();}catch(_){} }
+    var a=audioNodes.get(id); if(a){ a.srcObject=null; if(a.parentNode) a.parentNode.removeChild(a); audioNodes.delete(id); } }
+  function clearCalls(){ mediaCalls.forEach(function(_,id){ dropCall(id); }); }
+  function bindCall(call){
+    var id=call.peer, old=mediaCalls.get(id); if(old&&old!==call) dropCall(id);
+    mediaCalls.set(id,call);
+    call.on('stream', function(stream){
+      var a=audioNodes.get(id); if(!a){ a=document.createElement('audio'); a.autoplay=true; a.playsInline=true; if(document.body) document.body.appendChild(a); audioNodes.set(id,a); }
+      a.srcObject=stream; var pr=a.play(); if(pr&&pr.catch) pr.catch(function(){ toast('音频被拦截，再点一次语音'); });
+      render();
+    });
+    call.on('close', function(){ if(mediaCalls.get(id)===call){ mediaCalls.delete(id); var a=audioNodes.get(id); if(a){ a.srcObject=null; if(a.parentNode) a.parentNode.removeChild(a); audioNodes.delete(id); } render(); } });
+    call.on('error', function(){ if(mediaCalls.get(id)===call) dropCall(id); });
+  }
+  function syncCalls(){
+    if(!mic||!micOn||!peer||!peer.open) return;
+    var ids=new Set(); members.forEach(function(m){ if(m.voice&&m.peerId!==peer.id) ids.add(m.peerId); });
+    mediaCalls.forEach(function(_,id){ if(!ids.has(id)) dropCall(id); });
+    ids.forEach(function(id){ if(mediaCalls.has(id)) return;
+      if(peer.id.localeCompare(id)<0){ try{ var call=peer.call(id,mic); if(call) bindCall(call); }catch(_){} } });
+    render();
+  }
+  function toggleVoice(){
+    if(role==='welcome'||openingMic) return;
+    if(mic){ micOn=!micOn; mic.getAudioTracks().forEach(function(t){ t.enabled=micOn; });
+      if(!micOn) clearCalls(); broadcastVoice(); if(micOn) syncCalls(); render(); return; }
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ toast('需 HTTPS 并授权麦克风'); return; }
+    openingMic=true; var mb=$('mpMic'); if(mb) mb.disabled=true;
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})
+      .then(function(stream){ mic=stream; micOn=true; broadcastVoice(); syncCalls(); render(); toast('麦克风已开，开麦的玩家能听到你'); })
+      .catch(function(e){ toast(e&&e.name==='NotAllowedError'?'请在地址栏允许麦克风':'麦克风启动失败'); })
+      .then(function(){ openingMic=false; if(mb) mb.disabled=false; });
+  }
+
+  /* ===== 渲染与广播 ===== */
+  function rel(v,cam,n){ var d=(v-cam)%n; if(d>n/2)d-=n; if(d<-n/2)d+=n; return d; }
+  function ovSx(wx,cam){ return ((cam.VCOLS-1)/2 + rel(wx,cam.camX,cam.WCOLS))*cam.CELL; }
+  function ovSy(wy,cam){ return ((cam.VROWS-1)/2 + rel(wy,cam.camY,cam.WROWS))*cam.CELL; }
+
+  function broadcastPos(){
+    if(!S||!connected()) return;
+    var h=S.playerHead(); if(!h) return;
+    myTrail.unshift({x:h.x,y:h.y}); if(myTrail.length>12) myTrail.pop();
+    if(role==='host') broadcast({type:'pos',from:peer.id,trail:myTrail});
+    else toHost({type:'pos',trail:myTrail});
+  }
+
+  function drawGhosts(){
+    if(!overlay||!octx||!S) return; syncOverlaySize();
+    var cam=S.cam(); if(!cam) return;
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    var cell=Math.max(8,cam.CELL);
+    var now=Date.now();
+    Object.keys(remote).forEach(function(id){
+      var o=remote[id]; if(!o||!o.trail||!o.trail.length) return;
+      if(now-o.lastSeen>9000){ delete remote[id]; return; }
+      var pts=o.trail.map(function(p){ return {x:ovSx(p.x,cam), y:ovSy(p.y,cam)}; });
+      octx.globalAlpha=0.5; octx.strokeStyle=o.color; octx.lineWidth=cell*0.5; octx.lineJoin='round'; octx.lineCap='round';
+      octx.beginPath(); pts.forEach(function(p,i){ i?octx.lineTo(p.x,p.y):octx.moveTo(p.x,p.y); }); octx.stroke();
+      var h=pts[0];
+      octx.globalAlpha=0.85; octx.fillStyle=o.color;
+      octx.beginPath(); octx.arc(h.x,h.y,cell*0.42,0,6.2832); octx.fill();
+      /* 真·玩家标记：白色描边环（AI 蛇无此环） */
+      octx.globalAlpha=1; octx.lineWidth=3; octx.strokeStyle='#fff';
+      octx.beginPath(); octx.arc(h.x,h.y,cell*0.52,0,6.2832); octx.stroke();
+      var label=o.name+(o.line?(' · '+o.line):'');
+      octx.font='10px sans-serif'; octx.textAlign='center';
+      octx.lineWidth=3; octx.strokeStyle='rgba(0,0,0,.55)'; octx.strokeText(label,h.x,h.y-cell*0.62);
+      octx.fillStyle='#fff'; octx.fillText(label,h.x,h.y-cell*0.62);
+    });
+    octx.globalAlpha=1;
+  }
+
+  function announceDiff(){
+    var cur=members.map(function(m){return m.peerId;});
+    var curSet={}; cur.forEach(function(id){curSet[id]=1;});
+    if(mpBoot){ prevIds=cur; members.forEach(function(m){prevNames[m.peerId]=m.name;}); mpBoot=false; return; }
+    cur.forEach(function(id){ if(prevIds.indexOf(id)<0 && id!==localId()){ var m=memberOf(id); toast((m?m.name:'玩家')+' 加入'); } });
+    prevIds.forEach(function(id){ if(!curSet[id] && id!==localId()){ toast((prevNames[id]||'玩家')+' 离开了房间'); } });
+    prevIds=cur; prevNames={}; members.forEach(function(m){prevNames[m.peerId]=m.name;});
+  }
+
+  function render(){
+    if(role==='welcome') return;
+    announceDiff();
+    var r=$('mpRoom'); if(r) r.textContent= role==='host'? ('房间码：'+code) : ('房间：'+code);
+    var list=$('mpMembers');
+    if(list){
+      if(list.replaceChildren) list.replaceChildren(); else list.innerHTML='';
+      members.forEach(function(m,i){
+        var seat=document.createElement('div'); seat.className='mp-seat';
+        var dot=document.createElement('span'); dot.className='mp-dot'; dot.style.background=(m.line&&m.line.color)||'#888';
+        var nm=document.createElement('span'); nm.className='nm'; nm.textContent=m.name+(i===me()?' · 你':'');
+        var ln=document.createElement('span'); ln.className='ln'; ln.textContent=(m.line&&m.line.name)||'';
+        var vc=document.createElement('span'); vc.className='vc'; vc.textContent=m.voice?'🎙':'';
+        seat.appendChild(dot); seat.appendChild(nm); seat.appendChild(ln); seat.appendChild(vc); list.appendChild(seat);
+      });
+    }
+    var mb=$('mpMic'); if(mb) mb.textContent=micOn?'静音':'开启语音';
+  }
+
+  function leave(){
+    clearCalls(); if(mic&&mic.getTracks) mic.getTracks().forEach(function(t){ t.stop(); });
+    try{ if(peer&&!peer.destroyed) peer.destroy(); }catch(_){}
+    peer=null; members=[]; remote={}; myTrail=[]; mic=null; micOn=false; role='welcome'; code='';
+    panel.classList.add('hidden'); status(''); render();
+  }
+
+  /* 事件绑定 */
+  fab.addEventListener('click', function(){ panel.classList.toggle('hidden'); if(!panel.classList.contains('hidden')&&role!=='welcome') render(); });
+  $('mpCreate').addEventListener('click', function(){ choose('host'); });
+  $('mpJoin').addEventListener('click', function(){ choose('guest'); });
+  $('mpNick').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); if($('mpCodeIn').value) $('mpJoin').click(); else $('mpCreate').click(); } });
+  $('mpCodeIn').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); $('mpJoin').click(); } });
+  $('mpInvite').addEventListener('click', function(){
+    var u=inviteUrl();
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(function(){toast('邀请链接已复制');},function(){window.prompt('复制链接：',u);}); else window.prompt('复制链接：',u); }
+    catch(_){ window.prompt('复制链接：',u); }
+  });
+  $('mpMic').addEventListener('click', toggleVoice);
+  $('mpLeave').addEventListener('click', leave);
+  window.addEventListener('pagehide', function(){ if(mic&&mic.getTracks) mic.getTracks().forEach(function(t){t.stop();}); clearCalls(); try{ if(peer&&!peer.destroyed) peer.destroy(); }catch(_){} });
+
+  /* 渲染/广播循环（setInterval 在无头自检里是 no-op，不会报错） */
+  setInterval(broadcastPos, 120);
+  setInterval(drawGhosts, 40);
+
+  /* 从链接带房间码直接进入 */
+  try{ var ps=new URLSearchParams(location.search); var inc=(ps.get('room')||'').toUpperCase(); if(CODE_RE.test(inc)){ var ci=$('mpCodeIn'); if(ci) ci.value=inc; } }catch(_){}
+
+  window.__snakeMpDebug={ get:function(){ return {role:role,code:code,members:members.map(function(m){return {name:m.name,line:m.line,voice:m.voice};}),remote:Object.keys(remote).length,connected:connected()}; } };
 })();
 </script>
 </body>
