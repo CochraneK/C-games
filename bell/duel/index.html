@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2eee5">
+<meta name="description" content="77 与 315 的永久牌桌：心脏病对决，打开即坐，无需邀请码。">
+<title>77 vs 315 · 心脏病对决 · C-games</title>
+<link rel="stylesheet" href="../multi/style.css">
+<style>
+ /* 两人牌桌：座位列表与牌桌都改成两列 */
+ .roster{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .game-board{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .seat-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:24px 0 6px}
+ .seat-btn{border:1px solid var(--line);background:#f7f7f1;border-radius:16px;padding:22px 12px;
+   display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;font-family:inherit;
+   transition:background .18s,border-color .18s,transform .18s}
+ .seat-btn:hover{background:#eef4ec;border-color:#cddfcf;transform:translateY(-2px)}
+ .seat-btn .seat-num{font:600 34px Georgia,serif;color:#35684d;line-height:1}
+ .seat-btn small{font-size:11px;color:#958f85}
+ .seat .number.me{background:var(--green);color:#fff}
+ .seat .seat-num-big{font:600 15px Georgia,serif;color:#35684d}
+ .vs-line{text-align:center;font:600 13px Georgia,serif;color:#a57f68;letter-spacing:2px;margin:0 0 4px}
+ .play-card{width:min(100%,132px)}
+</style>
+<script defer src="../multi/core.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<div class="site">
+<header class="top"><a href="../../" class="back">← C-games</a><span class="brand">77 VS 315</span><button id="rulesButton" class="text-btn" type="button">规则说明</button></header>
+<main>
+ <div class="heading"><p class="eyebrow">PERMANENT TABLE</p><h1>77 与 315 的固定牌桌。<span>🔔</span></h1><p>这是一张永久牌桌，只有这两个座位。不用建房间、不用邀请码——把这个链接发给对方，各自坐下就能开局。</p></div>
+
+ <section id="seatPicker" class="panel welcome">
+  <div class="mode-symbol">🔔 <span>♠</span></div>
+  <h2>你坐哪一边？</h2>
+  <p class="muted">两个座位是固定的：77 和 315。选好了就开始等对面的那个人。</p>
+  <div class="seat-choices">
+    <button class="seat-btn" data-seat="0" type="button"><span class="seat-num">77</span><small>坐这个座位</small></button>
+    <button class="seat-btn" data-seat="1" type="button"><span class="seat-num">315</span><small>坐这个座位</small></button>
+  </div>
+  <p class="vs-line">77 &nbsp;VS&nbsp; 315</p>
+  <p class="tiny" id="pickNote">谁先坐下谁先占座。对方来了会自动连上，不用输任何码。<br>想省事可以把链接存成 <code>?seat=77</code> 或 <code>?seat=315</code>，下次打开直接坐到自己的位子。</p>
+ </section>
+
+ <section id="roomView" class="hidden">
+  <div class="room-bar"><div><span class="status-light" id="networkDot"></span><span id="networkText" role="status">正在连接…</span></div><div class="code-line"><span>永久牌桌 · 无需邀请码</span><button id="copyButton" class="text-btn" type="button">复制链接</button></div></div>
+  <div class="tabs" role="group" aria-label="游戏玩法">
+    <button type="button" id="classicTab" class="tab selected" aria-pressed="true">🍓 德国心脏病</button>
+    <button type="button" id="panTab" class="tab" aria-pressed="false">♠ 潘神心脏病</button>
+  </div>
+  <div class="voice-line"><div><span aria-hidden="true">🎙</span> <span id="voiceText">语音未开启</span></div><button id="voiceButton" class="btn outline voice" type="button">开启语音</button></div>
+
+  <section id="lobby" class="panel lobby">
+    <div class="section-head"><div><p class="eyebrow">WAITING ROOM</p><h2>等对面的那个人坐下。</h2></div><span class="mini-pill" id="lobbyCount">0 / 2 人</span></div>
+    <p class="muted">座位是固定的：左边永远是 77，右边永远是 315。刷新页面可以重选座位。</p>
+    <div id="roster" class="roster" aria-live="polite"></div>
+    <p id="lobbyHint" class="lobby-hint" role="status">把链接发给对方，等 TA 坐下。</p>
+    <div class="actions"><button id="readyButton" type="button" class="btn primary" disabled>我准备好了</button><button id="startButton" type="button" class="btn primary hidden" disabled>等待大家准备</button></div>
+    <p class="tiny" id="hostNote">两边都坐下并点准备后即可开局。</p>
+  </section>
+
+  <section id="playing" class="hidden">
+    <div class="game-head"><div><p class="eyebrow">ON THE TABLE</p><h2 id="gameTitle">德国心脏病</h2></div><div class="time-wrap"><span id="roundLabel">抢铃游戏</span><strong id="clock">—</strong></div></div>
+    <div id="gameBoard" class="game-board" aria-label="场上每人的明牌"></div>
+    <div class="bell-dock">
+      <button id="bellButton" class="bell" type="button" disabled aria-label="抢铃">🔔</button>
+      <div class="dock-actions"><p id="gameMessage" aria-live="polite">等待翻牌…</p><button id="flipButton" type="button" class="btn primary" disabled>翻一张牌</button></div>
+    </div>
+    <div class="game-bottom"><div id="scoreboard" class="scores"></div><button id="resetButton" type="button" class="btn outline">返回座位</button></div>
+    <p class="tiny">电脑用 Enter 翻牌、空格抢铃；手机点大铃铛。抢铃由房主端统一裁决。</p>
+  </section>
+ </section>
+</main>
+<footer>77 vs 315 · 永久牌桌 · <a href="../../">回到 C-games</a></footer>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="rulesDialog" class="rules"><button id="closeRules" type="button" class="close">×</button>
+ <p class="eyebrow">HOW TO PLAY</p><h2>77 与 315 的对决</h2>
+ <p><strong>德国心脏病：</strong>56 张水果牌均分两人。轮流翻牌，只看各自面前最新翻出的牌；任何一种水果总量<strong>恰好 5</strong>，双方都能抢铃。抢中收走场上全部明牌；误拍赔一张牌给对方。</p>
+ <p><strong>潘神心脏病：</strong>54 张扑克牌均分两人。出现 7、J、Q、K 或大小王，或者<strong>两人明牌数字之和是 7 的正倍数</strong>，即可拍铃。抢对 +2 分并收牌，抢错 −1 分并赔牌；3 分钟到时按积分、持牌数判定。</p>
+ <p>这是一张永久牌桌：座位 77 与 315 固定，链接不变，随时回来都还是这张桌子。谁先打开谁临时担任裁判端（负责裁决抢铃），座位顺序不受影响。</p>
+ <p class="muted">语音是浏览器间 WebRTC 点对点连接，不经过服务器；不保存录音。</p>
+ <button id="gotIt" class="btn primary" type="button">知道了</button>
+</dialog>
+</body>
+</html>
