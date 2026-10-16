@@ -1,5 +1,5 @@
-/* Bell Duel 77 vs 315 | 永久两人牌桌
-   - 房间固定：房间码写死为 77315，不需要创建/邀请码，链接不变、随时回来还是这张桌子。
+/* Bell Duel 77 vs 315 | 房间 SU77315（两个固定座位）
+   - 房间固定：房间码写死为 SU77315，不用创建、链接不变、随时回来还是这张桌子。
    - 座位固定：座位 0 永远是 77，座位 1 永远是 315；座位号直接等于游戏里的玩家索引，
      所以「77」在两边屏幕上永远是第 1 位，不会因为谁先来而颠倒。
    - 角色动态：谁先打开谁临时当房主（裁决端）。做法是抢注固定的 peer id，
@@ -9,7 +9,8 @@
 const Core=window.MultiBellCore;
 const $=id=>document.getElementById(id);
 const PREFIX='cgames-bell-duel-v1-';
-const ROOM='77315';
+const ROOM='su77315';
+const ROOM_CODE='SU77315';
 const HOST_ID=PREFIX+ROOM+'-host';
 const SEATS=['77','315'];
 const FRUITS={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
@@ -354,11 +355,25 @@ function pickSeat(seat){
 }
 
 /* ---------- 事件 ---------- */
+/* ---------- 房间码校验：不带码直接进也放行（方便直接发链接），带错码则拦下 ---------- */
+let gateOk=true;
+(function gate(){
+  try{
+    const p=new URLSearchParams(location.search||'');
+    const given=(p.get('room')||p.get('code')||'').trim().toUpperCase();
+    if(!given||given===ROOM_CODE) return;
+    gateOk=false;
+    $('seatPicker').classList.add('hidden');
+    $('roomView').classList.add('hidden');
+    const g=$('gate'); if(g) g.classList.remove('hidden');
+  }catch(_){}
+})();
 Array.prototype.forEach.call(document.querySelectorAll('.seat-btn'),b=>{
   b.addEventListener('click',()=>pickSeat(parseInt(b.getAttribute('data-seat'),10)));
 });
 /* 支持 ?seat=77 / ?seat=315 直接入座：77 和 315 可以各存各的链接，打开就是自己的座位 */
 (function autoSeat(){
+  if(!gateOk) return;
   try{
     const t=new URLSearchParams(location.search||'').get('seat');
     if(t===null) return;
@@ -379,7 +394,7 @@ $('rulesButton').addEventListener('click',()=>$('rulesDialog').showModal());
 $('closeRules').addEventListener('click',()=>$('rulesDialog').close());
 $('gotIt').addEventListener('click',()=>$('rulesDialog').close());
 $('copyButton').addEventListener('click',()=>{
-  let u=''; try{ const x=new URL(location.href); x.search=''; x.hash=''; u=x.toString(); }catch(_){ u=location.href||''; }
+  let u=''; try{ const x=new URL(location.href); x.search=''; x.hash=''; x.searchParams.set('room',ROOM_CODE); u=x.toString(); }catch(_){ u=location.href||''; }
   try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(()=>toast('链接已复制'),()=>window.prompt('复制牌桌链接：',u));
        else window.prompt('复制牌桌链接：',u); }catch(_){ window.prompt('复制牌桌链接：',u); }
 });

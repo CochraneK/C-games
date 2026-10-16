@@ -6,6 +6,10 @@ const $=id=>document.getElementById(id);
 const FRUITS={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 const PREFIX='cgames-bell-multi-v1-';
 const CODE_RE=/^[A-Z2-9]{8,12}$/;
+/* 固定双人房间：SU77315 不在这个房间的容量范围内（它只有两个固定座位），
+   所以要在正则校验前拦下来，转去 bell/duel/。 */
+const DUEL_CODE='SU77315';
+const gotoDuel=()=>{ window.location.href='./duel/?room='+DUEL_CODE; };
 const FAIR_WINDOW=180;
 let role='welcome',phase='lobby',kind='classic',capacity=4,code='',myName='';
 let peer=null,hostConnection=null,connections=new Map(),members=[],game=null,view=null;
@@ -261,6 +265,7 @@ function choose(which){
   members=[];kind='classic';phase='lobby';
  }else{
   code=$('joinCode').value.trim().toUpperCase();
+  if(code===DUEL_CODE){gotoDuel();return;}
   if(!CODE_RE.test(code)){role='welcome';toast('请输入有效的 8–12 位邀请码');return;}
  }
  connecting=true;showRoom();status('连接信令服务中…');
@@ -451,6 +456,7 @@ setInterval(()=>{
 window.addEventListener('pagehide',()=>{if(mic)mic.getTracks().forEach(t=>t.stop());clearCalls();try{peer?.destroy();}catch(_){}});
 const params=new URLSearchParams(location.search);
 const incoming=(params.get('room')||'').toUpperCase();
-if(CODE_RE.test(incoming)){$('joinCode').value=incoming;$('joinCode').parentElement?.classList.add('from-link');}
+if(incoming===DUEL_CODE)gotoDuel();
+else if(CODE_RE.test(incoming)){$('joinCode').value=incoming;$('joinCode').parentElement?.classList.add('from-link');}
 window.__multiDebug={get:()=>({role,phase,kind,capacity,members:members.map(m=>({...m})),view,connected:connected()}),core:Core};
 })();

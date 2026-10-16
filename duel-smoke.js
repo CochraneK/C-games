@@ -34,7 +34,8 @@ function makeEl(id) {
 }
 function seatBtn(seat) { const e = makeEl('btn' + seat); e.getAttribute = () => String(seat); return e; }
 
-function buildSandbox() {
+const HOST_ID = 'cgames-bell-duel-v1-su77315-host';   // 房间码 SU77315
+function buildSandbox(search) {
   const els = {};
   const seatBtns = [seatBtn(0), seatBtn(1)];
   const document = {
@@ -51,8 +52,9 @@ function buildSandbox() {
     console, document, Math, Date, JSON, String, Number, Array, Object, Error, Promise,
     setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
     URLSearchParams, URL,
+    history: { replaceState() {}, pushState() {} },
     navigator: {},
-    location: { href: 'https://example.github.io/C-games/bell/duel/', search: '' },
+    location: { href: 'https://example.github.io/C-games/bell/duel/', search: search || '' },
     Peer
   };
   sandbox.window = sandbox;
@@ -92,8 +94,13 @@ function makeConn(from) {
 function loadInto(sandbox, rel) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, rel), 'utf8'), sandbox, { filename: rel });
 }
-function boot() {
-  const ctx = buildSandbox();
+function boot(search) {
+  const ctx = buildSandbox(search);
+  // 模拟 index.html 的初始 class 状态（stub 元素不会解析 HTML 属性）
+  const d = ctx.sandbox.document;
+  d.getElementById('gate').classList.add('hidden');
+  d.getElementById('seatPicker').classList.remove('hidden');
+  d.getElementById('roomView').classList.add('hidden');
   loadInto(ctx.sandbox, 'bell/multi/core.js');
   loadInto(ctx.sandbox, 'bell/duel/app.js');
   return ctx;
@@ -112,7 +119,7 @@ function boot() {
     ok('mySeat = 0（77）', D.get().mySeat === 0, JSON.stringify(D.get()));
 
     const peers = Peer.__registry;
-    ok('抢注了固定 peer id', peers.length >= 1 && peers[0].id === 'cgames-bell-duel-v1-77315-host', peers[0] && peers[0].id);
+    ok('抢注了固定 peer id（房间码 SU77315）', peers.length >= 1 && peers[0].id === HOST_ID, peers[0] && peers[0].id);
     peers[0].open = true; peers[0].emit('open');
     ok('角色 = host', D.get().role === 'host', D.get().role);
     ok('77 已在座', D.get().seats[0].here === true);
@@ -196,7 +203,7 @@ function boot() {
     const peers = Peer.__registry;
     peers[0].emit('error', { type: 'unavailable-id' });
     await tick();
-    ok('固定 id 被占用后换随机 id', peers[peers.length - 1].id !== 'cgames-bell-duel-v1-77315-host', peers[peers.length - 1].id);
+    ok('固定 id 被占用后换随机 id', peers[peers.length - 1].id !== HOST_ID, peers[peers.length - 1].id);
     const gp = peers[peers.length - 1];
     gp.open = true; gp.emit('open');
     await tick();
@@ -213,13 +220,63 @@ function boot() {
 
   console.log('\n[5] ?seat= 参数直接入座');
   {
-    const ctx = buildSandbox();
-    ctx.sandbox.location.search = '?seat=315';
-    loadInto(ctx.sandbox, 'bell/multi/core.js');
-    loadInto(ctx.sandbox, 'bell/duel/app.js');
+    const ctx = boot('?seat=315');
     await tick();
     const st = ctx.sandbox.__duelDebug.get();
     ok('?seat=315 直接坐到座位 1', st.mySeat === 1, JSON.stringify(st));
+  }
+
+  console.log('\n[6] 房间码 SU77315 校验');
+  {
+    const el = (ctx, id) => ctx.sandbox.document.getElementById(id);
+    const noCode = boot('');
+    await tick();
+    ok('不带房间码也放行（可直接发链接）', el(noCode, 'gate').classList.contains('hidden'));
+
+    const good = boot('?room=SU77315&seat=77');
+    await tick();
+    ok('正确房间码放行', el(good, 'gate').classList.contains('hidden'));
+    ok('正确房间码 + seat=77 → 座位 0', good.sandbox.__duelDebug.get().mySeat === 0, JSON.stringify(good.sandbox.__duelDebug.get()));
+
+    const lower = boot('?room=su77315');
+    await tick();
+    ok('房间码大小写不敏感', el(lower, 'gate').classList.contains('hidden'));
+
+    const bad = boot('?room=WRONGCODE&seat=77');
+    await tick();
+    ok('错误房间码不放行', bad.sandbox.__duelDebug.get().mySeat === -1, JSON.stringify(bad.sandbox.__duelDebug.get()));
+    ok('错误房间码显示拦截页', !el(bad, 'gate').classList.contains('hidden'));
+    ok('错误房间码隐藏座位选择', el(bad, 'seatPicker').classList.contains('hidden'));
+    ok('错误房间码隐藏房间视图', el(bad, 'roomView').classList.contains('hidden'));
+
+    let copied = '';
+    good.sandbox.prompt = (m, u) => { copied = u; return u; };
+    good.sandbox.document.getElementById('copyButton').fire('click');
+    ok('复制的邀请链接带房间码', /room=SU77315/.test(String(copied)), String(copied));
+  }
+
+  console.log('\n[7] 大厅输入 su77315 → 跳到双人房间');
+  {
+    const ctx = buildSandbox('');
+    loadInto(ctx.sandbox, 'bell/game-core.js');
+    loadInto(ctx.sandbox, 'bell/pan-core.js');
+    let nav = '';
+    Object.defineProperty(ctx.sandbox.location, 'href', {
+      configurable: true,
+      get() { return 'https://example.github.io/C-games/bell/'; },
+      set(v) { nav = v; }
+    });
+    loadInto(ctx.sandbox, 'bell/app.js');
+    const d = ctx.sandbox.document;
+    d.getElementById('roomInput').value = 'su77315';       // 故意小写
+    d.getElementById('joinButton').fire('click');
+    ok('跳转 ./duel/?room=SU77315', /duel\/\?room=SU77315$/.test(String(nav)), String(nav));
+
+    // 普通房间码不能受影响（后面 render 需要真实 DOM，这里只关心「没有发生跳转」）
+    nav = '';
+    d.getElementById('roomInput').value = 'ABCDEFGH';
+    try { d.getElementById('joinButton').fire('click'); } catch (_) {}
+    ok('普通 8 位房间码不走跳转', nav === '', String(nav));
   }
 
   console.log('\n————————————————————————');

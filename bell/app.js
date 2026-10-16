@@ -7,6 +7,11 @@ const FRUIT={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 const PREFIX='cochranek-belltogether-v1-';
 const BELL_WINDOW=180;
 const ALLOWED=/^[A-Z2-9]{8,12}$/;
+/* 固定双人房间：房间码 SU77315 走 bell/duel/（两个固定座位）。
+   它比 ALLOWED 短，所以必须在正则校验之前单独拦下来。 */
+const DUEL_CODE='SU77315';
+const isDuelCode=c=>c===DUEL_CODE;
+function gotoDuel(){ window.location.href='./duel/?room='+DUEL_CODE; }
 const dom={
   welcome:$('welcome'),gameArea:$('gameArea'),host:$('hostButton'),practice:$('practiceButton'),join:$('joinButton'),roomInput:$('roomInput'),
   status:$('statusText'),dot:$('statusDot'),roomLabel:$('roomLabel'),copy:$('copyButton'),message:$('gameMessage'),bell:$('bellButton'),flip:$('flipButton'),
@@ -489,6 +494,7 @@ dom.host.addEventListener('click',()=>connectRoom(true,randomRoom()));
 dom.practice.addEventListener('click',startPractice);
 dom.join.addEventListener('click',()=>{
  const code=dom.roomInput.value.trim().toUpperCase();
+ if(isDuelCode(code)){gotoDuel();return;}
  if(!ALLOWED.test(code)){toast('请输入 8–12 位房间码（字母或数字）');return;}
  connectRoom(false,code);
 });
@@ -528,6 +534,7 @@ window.addEventListener('pagehide',()=>{if(mic)mic.getTracks().forEach(t=>t.stop
 window.__bellDebug={getState:()=>view, getMode:()=>mode, getRoom:()=>({phase:roomPhase,ready:seatReady.slice(),connected:Boolean(conn?.open)}),isFive:()=>Boolean(game&&C.isFive(game))};
 const params=new URLSearchParams(location.search);
 const code=(params.get('room')||'').toUpperCase();
-if(ALLOWED.test(code))connectRoom(params.get('join')!=='1',code);
+if(isDuelCode(code))gotoDuel();
+else if(ALLOWED.test(code))connectRoom(params.get('join')!=='1',code);
 else if(params.get('practice')==='1')startPractice();
 })();
