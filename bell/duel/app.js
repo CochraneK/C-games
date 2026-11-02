@@ -15,12 +15,17 @@ const HOST_ID=PREFIX+ROOM+'-host';
 const SEATS=['77','315'];
 const FRUITS={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 
-let mySeat=-1, role='', peer=null, conn=null, guestConn=null;
+let mySeat=-1, role='', peer=null, conn=null;
+/* 房主侧按「连接」记账，而不是只留最近一条：
+   曾经用单一 guestConn，结果一条已断开的野连接会把真正客人的座位清掉。 */
+let conns=new Set();
 let seats=[{here:false,ready:false,voice:false},{here:false,ready:false,voice:false}];
 let seatPeer={};
 let kind='classic', phase='lobby', game=null, view=null;
 let lastBellSent=0, toastTimer=null, retryTimer=null;
 let mic=null, micOn=false, openingMic=false, outgoing=null, incoming=null, audioEl=null;
+/* 房间码闸门：放文件顶部，避免 pickSeat 之类的函数在初始化前读到 TDZ */
+let gateOk=true;
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3000); }
 function status(msg,level){ $('networkText').textContent=msg; $('networkDot').className='status-light '+(level||''); }
@@ -34,24 +39,27 @@ function roomPacket(t){
   return {type:t||'room', seats:seats.map(s=>({here:!!s.here,ready:!!s.ready,voice:!!s.voice})),
           kind:kind, phase:phase, state:view};
 }
-function broadcast(d){ if(role!=='host') return; if(guestConn&&guestConn.open){ try{ guestConn.send(d); }catch(_){} } }
+function broadcast(d){
+  if(role!=='host') return;
+  conns.forEach(c=>{ if(c&&c.open){ try{ c.send(d); }catch(_){} } });
+}
 function send(d){ if(role==='guest'&&conn&&conn.open){ try{ conn.send(d); return true; }catch(_){} } return false; }
 function sendGame(){ if(role!=='host') return; view=Core.snapshot(game); broadcast(roomPacket('state')); render(); }
 
 /* ---------- 房主收到的客人消息 ---------- */
-function fromGuest(d){
-  if(!d||!d.type) return;
+function fromGuest(c,d){
+  if(!c||!d||!d.type) return;
   if(d.type==='join'){
     const seat=d.seat;
-    if(seat!==0&&seat!==1){ try{guestConn.send({type:'reject',reason:'座位无效'});}catch(_){} return; }
-    if(seats[seat].here){ try{guestConn.send({type:'reject',reason:'座位 '+SEATS[seat]+' 已经有人坐了'});}catch(_){} return; }
+    if(seat!==0&&seat!==1){ try{c.send({type:'reject',reason:'座位无效'});}catch(_){} return; }
+    if(seats[seat].here){ try{c.send({type:'reject',reason:'座位 '+SEATS[seat]+' 已经有人坐了'});}catch(_){} return; }
     seats[seat]={here:true,ready:false,voice:false};
-    seatPeer[seat]=guestConn.peer;
+    seatPeer[seat]=c.peer;
     broadcast(roomPacket()); render();
     toast(SEATS[seat]+' 坐下了');
     return;
   }
-  const seat=seatOf(guestConn&&guestConn.peer);
+  const seat=seatOf(c.peer);
   if(seat<0) return;
   if(d.type==='ready'&&phase==='lobby'&&typeof d.ready==='boolean'){
     seats[seat].ready=d.ready; broadcast(roomPacket()); render();
@@ -67,6 +75,9 @@ function fromHost(d){
   if(d.type==='reject'){
     toast(d.reason||'坐不下');
     mySeat=-1; role=''; cleanupPeer();
+    /* 清掉乐观占位，否则回到选座页再选另一边时，名单上会残留「已坐下」 */
+    seats=[{here:false,ready:false,voice:false},{here:false,ready:false,voice:false}];
+    seatPeer={};
     $('roomView').classList.add('hidden'); $('seatPicker').classList.remove('hidden');
     return;
   }
@@ -206,7 +217,8 @@ function renderGame(){
     head.appendChild(nm); head.appendChild(cnt); seat.appendChild(head);
     seat.appendChild(makeCard(s.piles[i].top));
     const badge=document.createElement('span'); badge.className='badge';
-    badge.textContent = remain===0?'已出局':(s.turn===i&&s.phase==='playing'?'轮到 TA 翻牌':'已翻 '+s.piles[i].length);
+    badge.textContent = remain===0?'已出局'
+      :(s.turn===i&&s.phase==='playing'?(i===mySeat?'轮到你翻牌':'轮到 TA 翻牌'):'已翻 '+s.piles[i].length);
     seat.appendChild(badge); board.appendChild(seat);
     const chip=document.createElement('span'); chip.className='score-chip'+(i===mySeat?' me':'');
     chip.textContent=SEATS[i]+(kind==='pan'?(' · '+s.scores[i]+' 分'):(' · '+remain+' 张'))+(seats[i]&&seats[i].voice?' 🎙':'');
@@ -287,7 +299,7 @@ function loadPeerJS(){
 }
 function cleanupPeer(){
   if(peer){ try{ if(!peer.destroyed) peer.destroy(); }catch(_){} peer=null; }
-  conn=null; guestConn=null;
+  conn=null; conns.clear();
 }
 function tryHost(){
   cleanupPeer(); status('正在占座…');
@@ -296,15 +308,17 @@ function tryHost(){
   p.on('open',()=>{
     role='host';
     seats[mySeat]={here:true,ready:false,voice:false};
-    seatPeer={};
+    seatPeer={}; conns.clear();
     status('已坐下 · 等对方','live'); render();
   });
   p.on('connection',c=>{
     if(role!=='host'){ c.close(); return; }
-    guestConn=c;
-    c.on('data',d=>fromGuest(d));
-    c.on('close',onGuestGone);
-    c.on('error',onGuestGone);
+    conns.add(c);
+    c.on('data',d=>fromGuest(c,d));
+    /* 关闭和出错都要能收尾，但不能重复清算同一个座位 */
+    const gone=()=>{ if(c.__gone) return; c.__gone=true; onGuestGone(c); };
+    c.on('close',gone);
+    c.on('error',gone);
   });
   p.on('call',inc=>{ incoming=inc; bindCall(inc); try{ inc.answer(mic||undefined); }catch(_){ try{inc.answer();}catch(__){} } });
   p.on('error',e=>{
@@ -334,11 +348,14 @@ function joinHost(){
      6 秒没握手成功就再抢一次固定 id，抢到就自己当房主。 */
   setTimeout(()=>{ if(!opened&&conn===c){ try{c.close();}catch(_){} status('没找到牌桌，正在重新占座…'); scheduleRetry(); } },6000);
 }
-function onGuestGone(){
-  const pid=guestConn&&guestConn.peer;
-  const seat=seatOf(pid);
-  guestConn=null; dropCalls();
-  if(seat>=0){ seats[seat]={here:false,ready:false,voice:false}; delete seatPeer[seat]; }
+function onGuestGone(c){
+  if(!conns.delete(c)) return;          // 已经清算过（例如 cleanupPeer 里清空），别重复处理
+  /* 关键：用「关闭的那条连接」的 peer id 找座位，不要用某条全局引用——
+     否则一条早该断开的野连接收尾时，会把真正客人的座位清掉。 */
+  const seat=seatOf(c&&c.peer);
+  if(seat<0) return;                    // 没坐到座位的野连接（被拒/还没 join），不影响牌桌
+  dropCalls();
+  seats[seat]={here:false,ready:false,voice:false}; delete seatPeer[seat];
   if(phase==='playing') resetLobby(); else { broadcast(roomPacket()); render(); }
   status('对方离开了 · 位置给你留着');
 }
@@ -347,7 +364,11 @@ function scheduleRetry(){
   retryTimer=setTimeout(()=>{ if(mySeat>=0) tryHost(); },2500);
 }
 function pickSeat(seat){
+  if(!gateOk) return;
   mySeat=seat;
+  /* 先乐观占位：否则从点座位到房主回执之间，自己的座位会显示成「空着，等人来」。
+     被 reject 时会把两边座位都清空。 */
+  seats[seat]={here:true,ready:false,voice:false};
   $('seatPicker').classList.add('hidden');
   $('roomView').classList.remove('hidden');
   render();
@@ -356,7 +377,6 @@ function pickSeat(seat){
 
 /* ---------- 事件 ---------- */
 /* ---------- 房间码校验：不带码直接进也放行（方便直接发链接），带错码则拦下 ---------- */
-let gateOk=true;
 (function gate(){
   try{
     const p=new URLSearchParams(location.search||'');

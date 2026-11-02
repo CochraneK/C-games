@@ -22,14 +22,23 @@ function makeClassList() {
 }
 function makeEl(id) {
   const el = {
-    id, textContent: '', innerHTML: '', disabled: false, className: '',
+    id, _text: '', _html: '', disabled: false, className: '',
     classList: makeClassList(), handlers: {}, children: [],
     setAttribute() {}, getAttribute() { return null; },
-    appendChild(c) { el.children.push(c); return c; },
+    appendChild(c) { el.children.push(c); if (c && typeof c._text === 'string') el._text += c._text; return c; },
     removeChild() {}, addEventListener(t, fn) { (el.handlers[t] = el.handlers[t] || []).push(fn); },
     matches() { return false; }, showModal() {}, close() {}, focus() {},
     fire(t, ev) { (el.handlers[t] || []).forEach(fn => fn(ev || { preventDefault() {}, target: null })); }
   };
+  // textContent / innerHTML 要能真实累积文本，否则没法断言渲染出的座位名
+  Object.defineProperty(el, 'textContent', {
+    get() { return el._text; },
+    set(v) { el._text = String(v); el.children.length = 0; }
+  });
+  Object.defineProperty(el, 'innerHTML', {
+    get() { return el._html; },
+    set(v) { el._html = String(v); el._text = ''; el.children.length = 0; }
+  });
   return el;
 }
 function seatBtn(seat) { const e = makeEl('btn' + seat); e.getAttribute = () => String(seat); return e; }
@@ -130,6 +139,9 @@ function boot(search) {
     gc.fireData({ type: 'join', seat: 1 });
     ok('315 已在座', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
     ok('座位顺序不被角色影响：0=77 / 1=315', D.get().seats[0].here && D.get().seats[1].here);
+    ok('候场名单真的渲染出 77 与 315',
+      String(els['roster'].textContent).includes('77') && String(els['roster'].textContent).includes('315'),
+      String(els['roster'].textContent));
 
     els['readyButton'].fire('click');              // 房主（77）准备
     gc.fireData({ type: 'ready', ready: true });   // 315 准备
@@ -139,10 +151,17 @@ function boot(search) {
     let st = D.get();
     ok('进入对局 phase=playing', st.phase === 'playing', st.phase);
     ok('先手是座位 0 = 77', st.turn === 0, String(st.turn));
+    ok('牌桌真的渲染出两个座位名',
+      String(els['gameBoard'].textContent).includes('77') && String(els['gameBoard'].textContent).includes('315'),
+      String(els['gameBoard'].textContent));
+    ok('轮到自己时文案是「轮到你翻牌」', String(els['gameBoard'].textContent).includes('轮到你翻牌'), String(els['gameBoard'].textContent));
 
     els['flipButton'].fire('click');
     st = D.get();
     ok('翻牌后轮到座位 1 = 315', st.turn === 1, String(st.turn));
+    ok('轮到对方时文案是「轮到 TA 翻牌」',
+      String(els['gameBoard'].textContent).includes('轮到 TA 翻牌'),
+      String(els['gameBoard'].textContent));
 
     const states = gc.sent.filter(p => p && p.type === 'state');
     ok('房主向客人广播牌局', states.length >= 1);
@@ -277,6 +296,83 @@ function boot(search) {
     d.getElementById('roomInput').value = 'ABCDEFGH';
     try { d.getElementById('joinButton').fire('click'); } catch (_) {}
     ok('普通 8 位房间码不走跳转', nav === '', String(nav));
+  }
+
+  console.log('\n[8] JS 内跳转路径能否真正解析到文件（防 ./duel/ 这类 404）');
+  {
+    const pathMod = require('path');
+    const pages = [
+      ['bell/index.html', 'bell/app.js'],
+      ['bell/multi/index.html', 'bell/multi/app.js'],
+      ['bell/duel/index.html', 'bell/duel/app.js']
+    ];
+    const broken = [];
+    for (const [page, js] of pages) {
+      const dir = pathMod.dirname(page);
+      const src = fs.readFileSync(pathMod.join(__dirname, js), 'utf8');
+      for (const m of src.matchAll(/location\.href\s*=\s*'([^']+)'/g)) {
+        const u = m[1];
+        if (/^https?:/.test(u)) continue;
+        const rel = pathMod.normalize(pathMod.join(dir, u.split('?')[0]));
+        const abs = pathMod.join(__dirname, rel);
+        const exists = fs.existsSync(abs) || fs.existsSync(pathMod.join(abs, 'index.html'));
+        if (!exists) broken.push(js + ' → ' + u + '（解析为 ' + rel + '）');
+      }
+    }
+    ok('所有 location.href 目标都存在', broken.length === 0, broken.join('  |  '));
+  }
+
+  console.log('\n[9] 客人被拒后回到选座页并清空乐观占位');
+  {
+    const ctx = boot('');
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
+    ok('入座瞬间先乐观占位（不会显示空着）', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
+    await tick();
+    const peers = ctx.Peer.__registry;
+    const gp = peers[peers.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    const c = gp.conns[0];
+    c.fireOpen();
+    c.fireData({ type: 'reject', reason: '座位 315 已经有人坐了' });
+
+    const st = D.get();
+    ok('被拒后 mySeat 回到 -1', st.mySeat === -1, String(st.mySeat));
+    ok('被拒后乐观占位被清空', st.seats[1].here === false, JSON.stringify(st.seats));
+    ok('被拒后回到选座页', !ctx.els['seatPicker'].classList.contains('hidden'));
+    ok('被拒后房间视图隐藏', ctx.els['roomView'].classList.contains('hidden'));
+  }
+
+  console.log('\n[10] 野连接断开不能把真正客人踢掉');
+  {
+    const { sandbox, seatBtns, Peer } = boot('');
+    const D = sandbox.__duelDebug;
+    seatBtns[0].fire('click');
+    await tick();
+    const host = Peer.__registry[0];
+    host.open = true; host.emit('open');
+
+    const stray = makeConn('stray-tab');          // 同一个人开的第二个标签页
+    host.emit('connection', stray);
+    stray.fireOpen();
+
+    const real = makeConn('guest-315');
+    host.emit('connection', real);
+    real.fireOpen();
+    real.fireData({ type: 'join', seat: 1 });
+    ok('315 已坐下', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    stray.fire('close');                          // 野连接迟到的关闭事件
+    ok('野连接断开后 315 座位仍在', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    const before = real.sent.length;
+    real.fireData({ type: 'ready', ready: true });
+    ok('真正客人的消息仍被处理', D.get().seats[1].ready === true, JSON.stringify(D.get().seats));
+    ok('广播仍能到达真正客人', real.sent.length > before);
   }
 
   console.log('\n————————————————————————');

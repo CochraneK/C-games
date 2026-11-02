@@ -9,7 +9,8 @@ const CODE_RE=/^[A-Z2-9]{8,12}$/;
 /* 固定双人房间：SU77315 不在这个房间的容量范围内（它只有两个固定座位），
    所以要在正则校验前拦下来，转去 bell/duel/。 */
 const DUEL_CODE='SU77315';
-const gotoDuel=()=>{ window.location.href='./duel/?room='+DUEL_CODE; };
+/* 注意：本页在 /bell/multi/，双人房间在 /bell/duel/ —— 必须用 ../duel/，用 ./duel/ 会 404 */
+const gotoDuel=()=>{ window.location.href='../duel/?room='+DUEL_CODE; };
 const FAIR_WINDOW=180;
 let role='welcome',phase='lobby',kind='classic',capacity=4,code='',myName='';
 let peer=null,hostConnection=null,connections=new Map(),members=[],game=null,view=null;
@@ -256,6 +257,12 @@ function loadPeerJS(){
 }
 function choose(which){
  if(connecting)return;
+ /* 双人房间用固定座位、不需要昵称 —— 这一步必须在昵称校验之前，
+    否则只输房间码的人会先被「先输入你的昵称」挡住。 */
+ if(which==='guest'){
+  code=$('joinCode').value.trim().toUpperCase();
+  if(code===DUEL_CODE){gotoDuel();return;}
+ }
  const nickname=cleanName($('nickname').value);
  if(!nickname){toast('先输入你的昵称');$('nickname').focus();return;}
  myName=nickname;role=which;
@@ -264,8 +271,6 @@ function choose(which){
   code=randomCode();
   members=[];kind='classic';phase='lobby';
  }else{
-  code=$('joinCode').value.trim().toUpperCase();
-  if(code===DUEL_CODE){gotoDuel();return;}
   if(!CODE_RE.test(code)){role='welcome';toast('请输入有效的 8–12 位邀请码');return;}
  }
  connecting=true;showRoom();status('连接信令服务中…');

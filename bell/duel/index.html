@@ -22,6 +22,10 @@
  .seat .seat-num-big{font:600 15px Georgia,serif;color:#35684d}
  .vs-line{text-align:center;font:600 13px Georgia,serif;color:#a57f68;letter-spacing:2px;margin:0 0 4px}
  .play-card{width:min(100%,132px)}
+ /* 覆盖宽度时必须把原样式里的两档窄屏一起补回来，
+    否则内联样式会盖掉 style.css 的 @media，小屏上牌会撑出格子 */
+ @media(max-width:720px){.play-card{width:min(100%,96px)}}
+ @media(max-width:360px){.play-card{width:72px}}
  /* 用在 <a> 上的按钮要补掉浏览器默认的链接样式 */
  a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-family:inherit}
 </style>
@@ -50,7 +54,7 @@
     <button class="seat-btn" data-seat="1" type="button"><span class="seat-num">315</span><small>坐这个座位</small></button>
   </div>
   <p class="vs-line">77 &nbsp;VS&nbsp; 315</p>
-  <p class="tiny" id="pickNote">谁先坐下谁先占座。对方来了会自动连上。<br>想省事可以把链接存成 <code>?room=SU77315&amp;seat=77</code> 或 <code>&amp;seat=315</code>，下次打开直接坐到自己的位子。</p>
+  <p class="tiny" id="pickNote">谁先坐下谁先占座。对方来了会自动连上。<br>想省事可以把链接存成 <code>?room=SU77315&amp;seat=77</code>，把最后的 77 换成 315 就是另一个座位。</p>
  </section>
 
  <section id="roomView" class="hidden">
@@ -63,7 +67,7 @@
 
   <section id="lobby" class="panel lobby">
     <div class="section-head"><div><p class="eyebrow">WAITING ROOM</p><h2>等对面的那个人坐下。</h2></div><span class="mini-pill" id="lobbyCount">0 / 2 人</span></div>
-    <p class="muted">座位是固定的：左边永远是 77，右边永远是 315。刷新页面可以重选座位。</p>
+    <p class="muted">座位是固定的：左边永远是 77，右边永远是 315，与谁先打开无关。刷新只会重新连一次。</p>
     <div id="roster" class="roster" aria-live="polite"></div>
     <p id="lobbyHint" class="lobby-hint" role="status">把链接发给对方，等 TA 坐下。</p>
     <div class="actions"><button id="readyButton" type="button" class="btn primary" disabled>我准备好了</button><button id="startButton" type="button" class="btn primary hidden" disabled>等待大家准备</button></div>
