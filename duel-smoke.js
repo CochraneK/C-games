@@ -44,7 +44,41 @@ function makeEl(id) {
 function seatBtn(seat) { const e = makeEl('btn' + seat); e.getAttribute = () => String(seat); return e; }
 
 const HOST_ID = 'cgames-bell-duel-v1-su77315-host';   // 房间码 SU77315
-function buildSandbox(search) {
+
+/* 可控时钟：心跳/看门狗这类逻辑必须靠「推进时间」才能测到 */
+function makeClock() {
+  let now = 1000, seq = 1;
+  const timers = new Map();
+  const clock = {
+    setTimeout(fn, ms) { const id = seq++; timers.set(id, { fn, at: now + (ms || 0), every: 0 }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    setInterval(fn, ms) { const id = seq++; timers.set(id, { fn, at: now + (ms || 1), every: Math.max(1, ms || 1) }); return id; },
+    clearInterval(id) { timers.delete(id); },
+    advance(ms) {
+      const end = now + ms;
+      for (let guard = 0; guard < 20000; guard++) {
+        let hit = null, hid = null;
+        timers.forEach((t, id) => { if (t.at <= end && (hit === null || t.at < hit.at)) { hit = t; hid = id; } });
+        if (!hit) break;
+        now = hit.at;
+        if (hit.every) hit.at = now + hit.every; else timers.delete(hid);
+        try { hit.fn(); } catch (_) {}
+      }
+      now = end;
+    },
+    get now() { return now; }
+  };
+  const RealDate = Date;
+  function FakeDate(...a) { return a.length ? new RealDate(...a) : new RealDate(now); }
+  FakeDate.now = () => now;
+  FakeDate.parse = RealDate.parse;
+  FakeDate.UTC = RealDate.UTC;
+  FakeDate.prototype = RealDate.prototype;
+  clock.Date = FakeDate;
+  return clock;
+}
+
+function buildSandbox(search, clock) {
   const els = {};
   const seatBtns = [seatBtn(0), seatBtn(1)];
   const document = {
@@ -58,8 +92,11 @@ function buildSandbox(search) {
   };
   const Peer = makePeerClass();
   const sandbox = {
-    console, document, Math, Date, JSON, String, Number, Array, Object, Error, Promise,
-    setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    console, document, Math, Date: clock ? clock.Date : Date, JSON, String, Number, Array, Object, Error, Promise,
+    setTimeout: clock ? clock.setTimeout : () => 0,
+    clearTimeout: clock ? clock.clearTimeout : () => {},
+    setInterval: clock ? clock.setInterval : () => 0,
+    clearInterval: clock ? clock.clearInterval : () => {},
     URLSearchParams, URL,
     history: { replaceState() {}, pushState() {} },
     navigator: {},
@@ -75,9 +112,12 @@ function buildSandbox(search) {
 }
 function makePeerClass() {
   const registry = [];
-  function Peer(id) {
+  function Peer(id, opts) {
+    // 客人侧是 new Peer({debug:0,config:...})，第一个参数是配置对象
+    if (id && typeof id === 'object') { opts = id; id = undefined; }
     const self = this;
     this.id = id || ('rand-' + Math.random().toString(36).slice(2, 8));
+    this.options = opts || {};
     this.open = false; this.destroyed = false; this.handlers = {}; this.conns = [];
     this.on = (t, fn) => { (self.handlers[t] = self.handlers[t] || []).push(fn); return self; };
     this.emit = (t, a) => { (self.handlers[t] || []).slice().forEach(fn => fn(a)); };
@@ -103,8 +143,8 @@ function makeConn(from) {
 function loadInto(sandbox, rel) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, rel), 'utf8'), sandbox, { filename: rel });
 }
-function boot(search) {
-  const ctx = buildSandbox(search);
+function boot(search, clock) {
+  const ctx = buildSandbox(search, clock);
   // 模拟 index.html 的初始 class 状态（stub 元素不会解析 HTML 属性）
   const d = ctx.sandbox.document;
   d.getElementById('gate').classList.add('hidden');
@@ -322,13 +362,39 @@ function boot(search) {
     ok('所有 location.href 目标都存在', broken.length === 0, broken.join('  |  '));
   }
 
-  console.log('\n[9] 客人被拒后回到选座页并清空乐观占位');
+  console.log('\n[9] 入座握手：没收到房主确认前不能显示「已坐下」');
   {
     const ctx = boot('');
     const D = ctx.sandbox.__duelDebug;
     ctx.seatBtns[1].fire('click');
     await tick();
-    ok('入座瞬间先乐观占位（不会显示空着）', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    // 这条是「对方说进来了、我这边没显示」的根因：以前点完座位就本地标成已坐下
+    ok('点完座位不假装已入座', D.get().seats[1].here === false, JSON.stringify(D.get().seats));
+    ok('名单显示「正在进入…」', /正在进入/.test(String(ctx.els['roster'].textContent)), String(ctx.els['roster'].textContent));
+    ok('未确认时 joined = false', D.get().joined === false);
+
+    ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
+    await tick();
+    const peers = ctx.Peer.__registry;
+    const gp = peers[peers.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    const c = gp.conns[0];
+    c.fireOpen();
+    ok('join 带上座位号 + 本机标识', c.sent.length && c.sent[0].type === 'join' && c.sent[0].seat === 1 && !!c.sent[0].cid, JSON.stringify(c.sent));
+
+    c.fireData({ type: 'welcome', you: 1, seats: [{ here: true, ready: false, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null });
+    ok('收到 welcome 后才 joined = true', D.get().joined === true);
+    ok('welcome 之后自己确实在座', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+  }
+
+  console.log('\n[10] 客人被拒后回到选座页并清空占位');
+  {
+    const ctx = boot('');
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
 
     ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
     await tick();
@@ -342,12 +408,13 @@ function boot(search) {
 
     const st = D.get();
     ok('被拒后 mySeat 回到 -1', st.mySeat === -1, String(st.mySeat));
-    ok('被拒后乐观占位被清空', st.seats[1].here === false, JSON.stringify(st.seats));
+    ok('被拒后占位被清空', st.seats[1].here === false, JSON.stringify(st.seats));
+    ok('被拒后 joined = false', st.joined === false);
     ok('被拒后回到选座页', !ctx.els['seatPicker'].classList.contains('hidden'));
     ok('被拒后房间视图隐藏', ctx.els['roomView'].classList.contains('hidden'));
   }
 
-  console.log('\n[10] 野连接断开不能把真正客人踢掉');
+  console.log('\n[11] 野连接断开不能把真正客人踢掉');
   {
     const { sandbox, seatBtns, Peer } = boot('');
     const D = sandbox.__duelDebug;
@@ -373,6 +440,125 @@ function boot(search) {
     real.fireData({ type: 'ready', ready: true });
     ok('真正客人的消息仍被处理', D.get().seats[1].ready === true, JSON.stringify(D.get().seats));
     ok('广播仍能到达真正客人', real.sent.length > before);
+  }
+
+  console.log('\n[12] 掉线重连要能拿回自己的座位（而不是被「已有人」挡住）');
+  {
+    const { sandbox, seatBtns, Peer } = boot('');
+    const D = sandbox.__duelDebug;
+    seatBtns[0].fire('click');
+    await tick();
+    const host = Peer.__registry[0];
+    host.open = true; host.emit('open');
+
+    const a = makeConn('phone-a');
+    host.emit('connection', a);
+    a.fireOpen();
+    a.fireData({ type: 'join', seat: 1, cid: 'X1' });
+    ok('第一次入座成功', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    // 同一个人换了一条连接回来（手机切后台后常见）
+    const b = makeConn('phone-a-2');
+    host.emit('connection', b);
+    b.fireOpen();
+    b.fireData({ type: 'join', seat: 1, cid: 'X1' });
+    ok('同一台设备重连能接管座位', D.get().seats[1].here === true && !b.sent.some(p => p && p.type === 'reject'), JSON.stringify(b.sent));
+    ok('旧连接被主动关掉', a.open === false);
+
+    // 别人来抢同一个座位仍然要拒
+    const c = makeConn('stranger');
+    host.emit('connection', c);
+    c.fireOpen();
+    c.fireData({ type: 'join', seat: 1, cid: 'ZZZ' });
+    ok('别人抢座仍被拒绝', !!c.sent.find(p => p && p.type === 'reject'), JSON.stringify(c.sent));
+    ok('被拒后座位没被弄乱', D.get().seats[1].here === true);
+  }
+
+  console.log('\n[13] 房主点「重新连接」后不能残留幽灵座位');
+  {
+    const { sandbox, seatBtns, Peer } = boot('');
+    const D = sandbox.__duelDebug;
+    seatBtns[0].fire('click');
+    await tick();
+    let host = Peer.__registry[0];
+    host.open = true; host.emit('open');
+
+    const g = makeConn('guest-315');
+    host.emit('connection', g);
+    g.fireOpen();
+    g.fireData({ type: 'join', seat: 1, cid: 'G1' });
+    ok('315 已在座', D.get().seats[1].here === true);
+
+    host.emit('open');                              // 信令断线重连后 Peer 会再 open 一次
+    ok('信令重连不会把在座的人清成空位', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+
+    D.reconnect();                                  // 相当于点「重新连接」/ 页面卡住后重来
+    ok('重建后不再残留「已坐下」', D.get().seats[1].here === false, JSON.stringify(D.get().seats));
+
+    host = Peer.__registry[Peer.__registry.length - 1];
+    host.open = true; host.emit('open');
+    const g2 = makeConn('guest-315b');
+    host.emit('connection', g2);
+    g2.fireOpen();
+    g2.fireData({ type: 'join', seat: 1, cid: 'G1' });
+    ok('对方能重新坐回 315', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+  }
+
+  console.log('\n[14] 心跳看门狗：房主没动静 6.5 秒 → 客人自动重连');
+  {
+    const clock = makeClock();
+    const ctx = boot('', clock);
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
+    ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
+    await tick();
+    const gp = ctx.Peer.__registry[ctx.Peer.__registry.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    const c1 = gp.conns[0];
+    c1.fireOpen();
+    c1.fireData({ type: 'welcome', you: 1, seats: [{ here: true, ready: false, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null });
+    ok('收到 welcome 后已连上', D.get().joined === true);
+
+    clock.advance(3000);
+    c1.fireData({ type: 'hb' });
+    ok('有心跳时不会误判掉线', D.get().joined === true, String(D.get().joined));
+
+    clock.advance(9000);                 // 房主那边彻底没消息了
+    ok('超过 6.5 秒没消息 → joined 置 false', D.get().joined === false, String(D.get().joined));
+
+    clock.advance(4000);
+    ok('看门狗自动重建了一条连接', gp.conns.length >= 2, 'conns=' + gp.conns.length);
+  }
+
+  console.log('\n[15] 对面已经走了、固定 id 还没释放 → 探测到空位就接管');
+  {
+    const clock = makeClock();
+    const ctx = boot('', clock);
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
+    const first = ctx.Peer.__registry[0];
+    first.emit('error', { type: 'unavailable-id' });
+    await tick();
+    const gp = ctx.Peer.__registry[ctx.Peer.__registry.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    ok('先降级为客人去连对面', D.get().role === 'guest', D.get().role);
+
+    let probe = null;
+    for (let i = 0; i < 15 && !probe; i++) {
+      clock.advance(2000);
+      probe = ctx.Peer.__registry.find(p => p !== first && p !== gp && p.id === HOST_ID && !p.destroyed) || null;
+    }
+    ok('连续连不上时会去探测固定 id', !!probe, ctx.Peer.__registry.map(p => p.id).join(','));
+    if (probe) {
+      probe.open = true; probe.emit('open');
+      await tick();
+      ok('抢到空位后接管当房主', D.get().role === 'host', D.get().role);
+      ok('座位号没被角色变化带跑：仍是 315', D.get().mySeat === 1, String(D.get().mySeat));
+    }
   }
 
   console.log('\n————————————————————————');

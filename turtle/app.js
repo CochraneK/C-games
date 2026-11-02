@@ -5,6 +5,13 @@
 const Core=window.TurtleCore;
 const $=id=>document.getElementById(id);
 const PREFIX='cgames-turtle-v1-';
+/* 公共 PeerJS 默认只带 Google STUN，国内常连不通；补上本地可达的 STUN 和免费 TURN */
+const ICE={iceServers:[
+  {urls:['stun:stun.qq.com:3478','stun:stun.miwifi.com:3478','stun:stun.chat.bilibili.com:3478']},
+  {urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],
+   username:'openrelayproject',credential:'openrelayproject'}
+],iceCandidatePoolSize:2};
 const CODE_RE=/^[A-Z2-9]{8,12}$/;
 let role='welcome',phase='lobby',capacity=8,code='',myName='';
 let peer=null,hostConnection=null,connections=new Map(),members=[],game=null,view=null;
@@ -247,7 +254,7 @@ function choose(which){
 async function startPeer(){
  try{await loadPeerJS();}catch(e){status(e.message,'off');toast(e.message);return;}
  const chosen=role==='host'?PREFIX+code+'-host':undefined;
- try{peer=chosen?new window.Peer(chosen,{debug:0}):new window.Peer({debug:0});}
+ try{peer=chosen?new window.Peer(chosen,{debug:0,config:ICE}):new window.Peer({debug:0,config:ICE});}
  catch(e){status('连接初始化失败','off');toast(String(e));return;}
  peer.on('open',()=>{
   if(role==='host'){

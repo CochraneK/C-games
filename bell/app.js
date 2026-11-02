@@ -5,6 +5,13 @@ let gameKind='classic';
 const $=id=>document.getElementById(id);
 const FRUIT={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 const PREFIX='cochranek-belltogether-v1-';
+/* 公共 PeerJS 默认只带 Google STUN，国内常连不通；补上本地可达的 STUN 和免费 TURN */
+const ICE={iceServers:[
+  {urls:['stun:stun.qq.com:3478','stun:stun.miwifi.com:3478','stun:stun.chat.bilibili.com:3478']},
+  {urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],
+   username:'openrelayproject',credential:'openrelayproject'}
+],iceCandidatePoolSize:2};
 const BELL_WINDOW=180;
 const ALLOWED=/^[A-Z2-9]{8,12}$/;
 /* 固定双人房间：房间码 SU77315 走 bell/duel/（两个固定座位）。
@@ -297,7 +304,7 @@ async function initPeer(){
  status('正在建立连接…');
  try{await loadPeerJS();}catch(e){status('联机依赖不可达','off');toast(e.message+'，可以先玩单人练习');return;}
  const id=mode==='host'?PREFIX+room+'-host':undefined;
- try{peer=id?new Peer(id,{debug:1}):new Peer({debug:1});}
+ try{peer=id?new Peer(id,{debug:1,config:ICE}):new Peer({debug:1,config:ICE});}
  catch(e){status('连接初始化失败','off');toast(String(e));return;}
  peer.on('open',()=>{
   if(mode==='host'){status('房间已创建 · 等待对方');toast('房间已创建，点“复制邀请”发给朋友');}

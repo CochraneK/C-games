@@ -9,6 +9,13 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const PREFIX='cgames-watch-v1-';
+/* 公共 PeerJS 默认只带 Google STUN，国内常连不通；补上本地可达的 STUN 和免费 TURN */
+const ICE={iceServers:[
+  {urls:['stun:stun.qq.com:3478','stun:stun.miwifi.com:3478','stun:stun.chat.bilibili.com:3478']},
+  {urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],
+   username:'openrelayproject',credential:'openrelayproject'}
+],iceCandidatePoolSize:2};
 const CODE_RE=/^[A-Z2-9]{4}$/;
 const DRIFT_SEEK=0.45;      // 超过这个偏差直接跳
 const DRIFT_NUDGE=0.12;     // 小偏差用倍速微调
@@ -195,7 +202,7 @@ function choose(which){
 function startPeer(){
   loadPeerJS().then(()=>{
     const id=role==='host'?PREFIX+code+'-host':undefined;
-    try{ peer=id?new window.Peer(id,{debug:0}):new window.Peer({debug:0}); }
+    try{ peer=id?new window.Peer(id,{debug:0,config:ICE}):new window.Peer({debug:0,config:ICE}); }
     catch(e){ toast(String(e)); connecting=false; return; }
     peer.on('open',()=>{
       connecting=false;

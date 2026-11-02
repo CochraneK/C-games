@@ -5,6 +5,14 @@ const Core=window.MultiBellCore;
 const $=id=>document.getElementById(id);
 const FRUITS={strawberry:'🍓',banana:'🍌',lime:'🍋',plum:'🍇'};
 const PREFIX='cgames-bell-multi-v1-';
+/* PeerJS 默认只用 Google 的 STUN，国内经常连不通（表现为「对方说进来了我这边没反应」）。
+   换成国内可达的 STUN + 一个免费 TURN 兜底。 */
+const ICE={iceServers:[
+  {urls:['stun:stun.qq.com:3478','stun:stun.miwifi.com:3478','stun:stun.chat.bilibili.com:3478']},
+  {urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],
+   username:'openrelayproject',credential:'openrelayproject'}
+],iceCandidatePoolSize:2};
 const CODE_RE=/^[A-Z2-9]{8,12}$/;
 /* 固定双人房间：SU77315 不在这个房间的容量范围内（它只有两个固定座位），
    所以要在正则校验前拦下来，转去 bell/duel/。 */
@@ -280,7 +288,7 @@ function choose(which){
 async function startPeer(){
  try{await loadPeerJS();}catch(e){status(e.message,'off');toast(e.message);connecting=false;return;}
  const chosen=role==='host'?PREFIX+code+'-host':undefined;
- try{peer=chosen?new window.Peer(chosen,{debug:0}):new window.Peer({debug:0});}
+ try{peer=chosen?new window.Peer(chosen,{debug:0,config:ICE}):new window.Peer({debug:0,config:ICE});}
  catch(e){status('连接初始化失败','off');toast(String(e));connecting=false;return;}
  peer.on('open',()=>{
   connecting=false;
