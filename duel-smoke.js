@@ -88,7 +88,9 @@ function buildSandbox(search, clock) {
     createElement() { return makeEl('dyn'); },
     createTextNode() { return { textContent: '' }; },
     head: makeEl('head'), body: makeEl('body'), documentElement: makeEl('html'),
-    addEventListener() {}
+    __handlers: {},
+    addEventListener(t, fn) { (this.__handlers[t] = this.__handlers[t] || []).push(fn); },
+    __fire(t, ev) { (this.__handlers[t] || []).slice().forEach(fn => fn(ev || {})); }
   };
   const Peer = makePeerClass();
   const sandbox = {
@@ -100,12 +102,14 @@ function buildSandbox(search, clock) {
     URLSearchParams, URL,
     history: { replaceState() {}, pushState() {} },
     navigator: {},
-    location: { href: 'https://example.github.io/C-games/bell/duel/', search: search || '' },
+    location: { href: 'https://example.github.io/C-games/bell/duel/', search: search || '', reload() {} },
     Peer
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
-  sandbox.addEventListener = () => {};
+  sandbox.__handlers = {};
+  sandbox.addEventListener = (t, fn) => { (sandbox.__handlers[t] = sandbox.__handlers[t] || []).push(fn); };
+  sandbox.__fire = (t, ev) => { (sandbox.__handlers[t] || []).slice().forEach(fn => fn(ev || {})); };
   sandbox.removeEventListener = () => {};
   vm.createContext(sandbox);
   return { sandbox, els, seatBtns, Peer };
@@ -207,6 +211,7 @@ function boot(search, clock) {
     ok('房主向客人广播牌局', states.length >= 1);
     const last = states[states.length - 1];
     ok('快照只有两个座位（77 与 315）', last && last.state && last.state.hands.length === 2);
+    ok('状态广播带上「收给哪个座位」(you=1)', last && last.you === 1, JSON.stringify(last && last.you));
 
     els['bellButton'].fire('click');               // 房主（77）抢铃
     ok('抢铃后有新广播', gc.sent.filter(p => p && p.type === 'state').length >= 2);
@@ -271,10 +276,13 @@ function boot(search, clock) {
     const c = gp.conns[0];
     c.fireOpen();
     ok('客人 join 带自己的座位号 1', c.sent.length && c.sent[0].type === 'join' && c.sent[0].seat === 1, JSON.stringify(c.sent));
-    c.fireData({ type: 'room', seats: [{ here: true, ready: true, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null });
+    const pkt = { seats: [{ here: true, ready: true, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null };
+    c.fireData(Object.assign({ type: 'welcome', you: 1 }, pkt));   // 真实协议：先回执，再广播
+    c.fireData(Object.assign({ type: 'room', you: 1 }, pkt));
     const st = D.get();
     ok('客人同步到 2 人', st.seats[0].here && st.seats[1].here, JSON.stringify(st.seats));
     ok('客人自己的座位还是 1 = 315', st.mySeat === 1, String(st.mySeat));
+    ok('握手完成后 joined = true', st.joined === true, String(st.joined));
   }
 
   console.log('\n[5] ?seat= 参数直接入座');
@@ -432,6 +440,9 @@ function boot(search, clock) {
     real.fireOpen();
     real.fireData({ type: 'join', seat: 1 });
     ok('315 已坐下', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+    ok('没入座的野连接不该收到牌桌状态广播（否则它也会显示「已连上」）',
+      !stray.sent.some(p => p && (p.type === 'welcome' || p.type === 'room' || p.type === 'state' || p.type === 'hb')),
+      JSON.stringify(stray.sent));
 
     stray.fire('close');                          // 野连接迟到的关闭事件
     ok('野连接断开后 315 座位仍在', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
@@ -487,10 +498,12 @@ function boot(search, clock) {
     host.emit('connection', g);
     g.fireOpen();
     g.fireData({ type: 'join', seat: 1, cid: 'G1' });
+    g.fireData({ type: 'ready', ready: true });
     ok('315 已在座', D.get().seats[1].here === true);
 
     host.emit('open');                              // 信令断线重连后 Peer 会再 open 一次
     ok('信令重连不会把在座的人清成空位', D.get().seats[1].here === true, JSON.stringify(D.get().seats));
+    ok('信令重连不会把对方「已准备」清掉（否则两边要重新点准备）', D.get().seats[1].ready === true, JSON.stringify(D.get().seats));
 
     D.reconnect();                                  // 相当于点「重新连接」/ 页面卡住后重来
     ok('重建后不再残留「已坐下」', D.get().seats[1].here === false, JSON.stringify(D.get().seats));
@@ -559,6 +572,130 @@ function boot(search, clock) {
       ok('抢到空位后接管当房主', D.get().role === 'host', D.get().role);
       ok('座位号没被角色变化带跑：仍是 315', D.get().mySeat === 1, String(D.get().mySeat));
     }
+  }
+
+  console.log('\n[16] 客户端侧：没收到 welcome，任何状态广播都不能算「已入座」');
+  {
+    const ctx = boot('');
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
+    ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
+    await tick();
+    const gp = ctx.Peer.__registry[ctx.Peer.__registry.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    const c = gp.conns[0];
+    c.fireOpen();
+    const pkt = { seats: [{ here: true, ready: false, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null };
+    // 房主给别的连接广播时，这条还没被接受的连接不该「顺带」入座
+    c.fireData(Object.assign({ type: 'room', you: 1 }, pkt));
+    ok('没 welcome 时 room 广播不能让 joined 变 true', D.get().joined === false, String(D.get().joined));
+    ok('界面仍显示「正在进入…」', /正在进入/.test(String(ctx.els['roster'].textContent)), String(ctx.els['roster'].textContent));
+    c.fireData(Object.assign({ type: 'welcome', you: 1 }, pkt));
+    ok('补上 welcome 后才真正入座', D.get().joined === true, String(D.get().joined));
+  }
+
+  console.log('\n[17] 页面从 bfcache 恢复（返回/前进）要能自己重连');
+  {
+    const ctx = boot('');
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[0].fire('click');
+    await tick();
+    const p0 = ctx.Peer.__registry[0];
+    p0.open = true; p0.emit('open');
+    ok('离开前是房主且已入座', D.get().role === 'host' && D.get().joined === true, JSON.stringify(D.get()));
+
+    ctx.sandbox.__fire('pagehide', {});
+    ok('pagehide 会释放固定 id', p0.destroyed === true);
+    ctx.sandbox.__fire('pageshow', { persisted: true });
+    await tick();
+    ok('bfcache 回来会重建连接（否则界面永久僵住）', ctx.Peer.__registry.length >= 2, 'peers=' + ctx.Peer.__registry.length);
+    ok('重连后座位号不变', D.get().mySeat === 0, String(D.get().mySeat));
+  }
+
+  console.log('\n[18] ICE 状态：抖动不打断、失败自动重连、旧连接事件不干扰');
+  {
+    const clock = makeClock();
+    const ctx = boot('', clock);
+    const D = ctx.sandbox.__duelDebug;
+    ctx.seatBtns[1].fire('click');
+    await tick();
+    ctx.Peer.__registry[0].emit('error', { type: 'unavailable-id' });
+    await tick();
+    const gp = ctx.Peer.__registry[ctx.Peer.__registry.length - 1];
+    gp.open = true; gp.emit('open');
+    await tick();
+    const c1 = gp.conns[0];
+    c1.fireOpen();
+    const pkt = { seats: [{ here: true, ready: false, voice: false }, { here: true, ready: false, voice: false }], kind: 'classic', phase: 'lobby', state: null };
+    c1.fireData(Object.assign({ type: 'welcome', you: 1 }, pkt));
+    ok('先正常入座', D.get().joined === true);
+
+    c1.fire('iceStateChanged', 'disconnected');
+    ok('短暂 disconnected 不把人踢下线（能自恢复）', D.get().joined === true);
+
+    c1.fire('iceStateChanged', 'failed');
+    ok('ICE failed 立刻取消「已入座」', D.get().joined === false);
+    clock.advance(7000);
+    ok('之后自动建了新连接', gp.conns.length >= 2, 'conns=' + gp.conns.length);
+
+    const c2 = gp.conns[gp.conns.length - 1];
+    c2.fireOpen();
+    c2.fireData(Object.assign({ type: 'welcome', you: 1 }, pkt));
+    ok('新连接能重新入座', D.get().joined === true, String(D.get().joined));
+    c1.fire('iceStateChanged', 'failed');            // 旧连接迟到的事件
+    ok('旧连接的迟到事件不会把新连接踢下线', D.get().joined === true);
+  }
+
+  console.log('\n[19] 其他联机页的 bfcache 恢复处理不能漏');
+  {
+    const need = [
+      ['bell/duel/app.js', 'hardReconnect'],
+      ['watch/app.js', 'location.reload'],
+      ['turtle/app.js', 'location.reload'],
+      ['bell/multi/app.js', 'location.reload']
+    ];
+    const miss = [];
+    for (const [f, expect] of need) {
+      const s = fs.readFileSync(path.join(__dirname, f), 'utf8');
+      if (!/addEventListener\('pageshow'/.test(s) || !s.includes(expect)) miss.push(f);
+    }
+    ok('pagehide 会销毁 peer 的页面都有 pageshow 恢复', miss.length === 0, miss.join(', '));
+    const lobby = fs.readFileSync(path.join(__dirname, 'bell/app.js'), 'utf8');
+    ok('大厅不销毁 peer，不该被强制刷新打断', !/addEventListener\('pageshow'/.test(lobby));
+  }
+
+  console.log('\n[20] PeerJS CDN 加载：并发抢、全挂要立刻报错');
+  {
+    const bootNoPeer = () => {
+      const ctx = buildSandbox('');
+      delete ctx.sandbox.Peer;                 // 强制走 CDN 加载分支
+      const d = ctx.sandbox.document;
+      d.getElementById('gate').classList.add('hidden');
+      d.getElementById('roomView').classList.add('hidden');
+      loadInto(ctx.sandbox, 'bell/multi/core.js');
+      loadInto(ctx.sandbox, 'bell/duel/app.js');
+      return ctx;
+    };
+    const a = bootNoPeer();
+    let inserted = 0;
+    a.sandbox.document.head.appendChild = s => {
+      inserted++;
+      if (s.onload) { a.sandbox.Peer = a.Peer; s.onload(); }
+    };
+    a.seatBtns[0].fire('click');
+    await tick();
+    ok('四个 CDN 同时发出（不是串行等 9 秒一个）', inserted === 4, 'inserted=' + inserted);
+    ok('加载成功后继续抢注房间 id', a.Peer.__registry.length >= 1 && a.Peer.__registry[0].id === HOST_ID,
+      a.Peer.__registry.map(p => p.id).join(','));
+
+    const b = bootNoPeer();
+    b.sandbox.document.head.appendChild = s => { if (s.onerror) s.onerror(); };
+    b.seatBtns[0].fire('click');
+    await tick();
+    ok('四个 CDN 全挂时立刻提示「联机不可用」', /联机不可用/.test(String(b.els['networkText'].textContent)),
+      String(b.els['networkText'].textContent));
   }
 
   console.log('\n————————————————————————');

@@ -77,7 +77,15 @@ function roomPacket(t){
 }
 function broadcast(d){
   if(role!=='host') return;
-  conns.forEach(c=>{ if(c&&c.open){ try{ c.send(d); }catch(_){} } });
+  conns.forEach(c=>{
+    /* 只发给房主已经确认过座位的连接。以前是「所有 open 的连接都发」，
+       结果一条还没 join 的野连接也会收到 room/state，客户端拿它把自己标成
+       「已坐下」—— 它那边说进来了，房主这边根本没这个人。 */
+    const s=seatOf(c&&c.peer);
+    if(s<0||!seats[s].here||!c.open) return;
+    /* 每个包都带上「这是发给哪个座位的」，客户端才能判断包是不是给自己的 */
+    try{ c.send(Object.assign({},d,{you:s})); }catch(_){}
+  });
 }
 function send(d){ if(role==='guest'&&conn&&conn.open){ try{ conn.send(d); return true; }catch(_){} } return false; }
 function sendGame(){ if(role!=='host') return; view=Core.snapshot(game); broadcast(roomPacket('state')); render(); }
@@ -125,6 +133,12 @@ function fromGuest(c,d){
   else if(d.type==='kind'&&['classic','pan'].indexOf(d.kind)>=0&&d.kind!==kind){ changeKind(d.kind); }
 }
 /* ---------- 客人收到的房主消息 ---------- */
+function applyHostState(d){
+  if(Array.isArray(d.seats)) seats=d.seats.map(s=>({here:!!s.here,ready:!!s.ready,voice:!!s.voice}));
+  if(d.kind) kind=d.kind;
+  if(d.phase) phase=d.phase;
+  view = phase==='playing' ? (d.state||null) : null;
+}
 function fromHost(d){
   if(!d||!d.type) return;
   lastHostAt=Date.now();
@@ -136,19 +150,28 @@ function fromHost(d){
     /* 清掉占位，否则回到选座页再选另一边时，名单上会残留「已坐下」 */
     resetOccupancy();
     $('roomView').classList.add('hidden'); $('seatPicker').classList.remove('hidden');
+    status('这个座位没坐上 · 回选座页重试','off');
     render();
     return;
   }
-  if(d.type==='welcome'||d.type==='room'||d.type==='state'){
+  if(d.type==='welcome'){
+    /* 唯一能让客户端认为自己「入座成功」的消息。必须带合法座位号。 */
+    if(d.you!==0&&d.you!==1) return;
     const first=!joined;
-    if(d.type==='welcome'&&(d.you===0||d.you===1)) mySeat=d.you;
-    if(Array.isArray(d.seats)) seats=d.seats.map(s=>({here:!!s.here,ready:!!s.ready,voice:!!s.voice}));
-    if(d.kind) kind=d.kind;
-    if(d.phase) phase=d.phase;
-    view = phase==='playing' ? (d.state||null) : null;
+    mySeat=d.you;
+    applyHostState(d);
     joined=true; joinAttempt=0;
     status('已连上牌桌','live'); render();
     if(first) toast('已进入牌桌');
+    return;
+  }
+  if(d.type==='room'||d.type==='state'){
+    /* 没被 welcome 确认过：任何广播都不算数，界面继续显示「正在进入…」。
+       you 是房主标注的接收座位，发给别人的包不能拿来改自己的界面。 */
+    if(!joined) return;
+    if(d.you!==undefined&&d.you!==mySeat) return;
+    applyHostState(d);
+    render();
   }
 }
 
@@ -253,7 +276,7 @@ function renderLobby(){
     card.appendChild(num); card.appendChild(nm); card.appendChild(st); box.appendChild(card);
   }
   const mine=mySeat>=0?seats[mySeat]:null;
-  $('readyButton').disabled = !(mine&&mine.here&&phase==='lobby');
+  $('readyButton').disabled = !(connected()&&mine&&mine.here&&phase==='lobby');
   $('readyButton').textContent = (mine&&mine.ready)?'取消准备':'我准备好了';
   const sb=$('startButton');
   sb.classList.toggle('hidden', role!=='host');
@@ -345,6 +368,8 @@ function toggleVoice(){
 }
 
 /* ---------- 连接：抢注固定 id 当房主，抢不到就当客人 ---------- */
+/* 四个 CDN 并发抢，谁先加载成功用谁。以前是串行 await，每个 9 秒超时，
+   最坏要等 36 秒才告诉用户「联机加载失败」——这段时间界面只会一直转圈。 */
 function loadPeerJS(){
   if(window.Peer) return Promise.resolve();
   const srcs=[
@@ -353,18 +378,28 @@ function loadPeerJS(){
     'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js'
   ];
-  return (async()=>{
-    for(const src of srcs){
-      try{ await new Promise((res,rej)=>{
-        const s=document.createElement('script'); s.src=src; s.async=true;
-        const to=setTimeout(()=>{ if(s.parentNode) s.parentNode.removeChild(s); rej(Error('timeout')); },9000);
-        s.onload=()=>{ clearTimeout(to); window.Peer?res():rej(Error('missing')); };
-        s.onerror=()=>{ clearTimeout(to); if(s.parentNode) s.parentNode.removeChild(s); rej(Error('cdn')); };
-        (document.head||document.documentElement).appendChild(s);
-      }); return; }catch(_){}
-    }
-    throw Error('联机模块加载失败，请检查网络');
-  })();
+  return new Promise((resolve,reject)=>{
+    const nodes=[];
+    let done=false, alive=srcs.length, guard=null;
+    const finish=ok=>{
+      if(done) return; done=true;
+      if(guard) clearTimeout(guard);
+      nodes.forEach(n=>{ try{ if(n.parentNode) n.parentNode.removeChild(n); }catch(_){} });
+      if(ok&&window.Peer) resolve(); else reject(Error('联机模块加载失败，请检查网络'));
+    };
+    guard=setTimeout(()=>finish(false),12000);
+    srcs.forEach(src=>{
+      let s;
+      try{ s=document.createElement('script'); s.src=src; s.async=true; }
+      catch(_){ if(--alive<=0) finish(false); return; }
+      nodes.push(s);
+      s.onload=()=>{ if(window.Peer) finish(true); else if(--alive<=0) finish(false); };
+      s.onerror=()=>{ if(--alive<=0) finish(false); };
+      try{ (document.head||document.documentElement).appendChild(s); }
+      catch(_){ if(--alive<=0) finish(false); }
+    });
+    if(!nodes.length) finish(false);
+  });
 }
 function cleanupPeer(){
   clearTimeout(joinTimer); joinTimer=null;
@@ -403,14 +438,15 @@ function wireHost(p){
 function onHostReady(p){
   if(peer!==p) return;
   role='host'; joined=true; hostFails=0; lastHostAt=Date.now();
-  /* 清掉没有连接挂着的幽灵座位，但保留仍然活着的客人状态。
-     信令断线重连后 Peer 会再 open 一次，这时候数据通道通常还在——
-     无脑清空会让牌桌把还在座的人显示成空的，正是「他说进来了我这边没显示」。 */
+  /* 清掉没有连接挂着的幽灵座位，但保留仍然活着的人的在座 / 准备 / 开麦状态。
+     信令断线重连后 Peer 会再 open 一次，数据通道通常还在——无脑清空会让牌桌
+     把还在座的人显示成空的，或者把双方「已准备」悄悄抹掉要重点一次。 */
   const alive=[];
-  conns.forEach(c=>{ if(c&&c.open){ const s=seatOf(c.peer); if(s>=0) alive.push([s,c.peer]); } });
+  conns.forEach(c=>{ if(c&&c.open){ const s=seatOf(c.peer); if(s>=0) alive.push([s,c.peer,{ready:seats[s].ready,voice:seats[s].voice}]); } });
+  const minePrev = mySeat>=0 ? {ready:seats[mySeat].ready,voice:seats[mySeat].voice} : null;
   resetOccupancy();
-  alive.forEach(([s,pid])=>{ seats[s]={here:true,ready:false,voice:false}; seatPeer[s]=pid; });
-  if(mySeat>=0) seats[mySeat]={here:true,ready:false,voice:false};
+  alive.forEach(([s,pid,prev])=>{ seats[s]={here:true,ready:!!(prev&&prev.ready),voice:!!(prev&&prev.voice)}; seatPeer[s]=pid; });
+  if(mySeat>=0) seats[mySeat]={here:true,ready:!!(minePrev&&minePrev.ready),voice:!!(minePrev&&minePrev.voice)};
   status(alive.length?'对方在牌桌上':'已坐下 · 等对方','live');
   render();
 }
@@ -474,6 +510,7 @@ function joinHost(){
   try{ c=peer.connect(HOST_ID,{reliable:true,serialization:'json'}); }
   catch(_){ scheduleRejoin(1200); return; }
   conn=c; c.__cid=CLIENT; c.__t0=Date.now();
+  watchICE(c);
   let acked=false;
   c.on('open',()=>{
     if(conn!==c) return;
@@ -505,6 +542,24 @@ function joinHost(){
     if(role==='guest') scheduleRejoin(200);
   },8000);
 }
+/* 监听 PeerJS 官方的 iceStateChanged（BaseConnectionEvents 里公开声明）。
+   ICE failed 时信令层可能一声不吭，界面就永远停在「正在加入」；
+   failed/closed 立刻重连，disconnected 交给心跳看门狗（那种状态常能自恢复）。 */
+function watchICE(c){
+  try{
+    c.on('iceStateChanged',state=>{
+      if(state!=='failed'&&state!=='closed') return;
+      if(conn!==c||role!=='guest') return;
+      toast('直连失败，正在换条路重连…');
+      joined=false;
+      /* 必须先把这条死通道作废：否则 joinHost 看到 conn.open 还为真，
+         只会往它上面补发一个 join，永远等不到回话，也不会新建连接。 */
+      conn=null;
+      try{ c.close(); }catch(_){}
+      scheduleRejoin(300);
+    });
+  }catch(_){}
+}
 function scheduleRejoin(minDelay){
   if(role!=='guest'||mySeat<0) return;
   clearTimeout(joinTimer);
@@ -512,6 +567,7 @@ function scheduleRejoin(minDelay){
   const back=Math.min(700*Math.pow(1.7,Math.min(joinAttempt,4)),6000);
   const wait=Math.max(minDelay||0,back*(0.85+Math.random()*0.3));
   if(joinAttempt===1) status('正在加入牌桌…');
+  else if(joinAttempt>=3) status('连了几次都没通 · 试试换个网络，或点「重新连接」');
   else status('还没连上 · 第 '+joinAttempt+' 次重试…');
   joinTimer=setTimeout(()=>{
     if(role!=='guest') return;
@@ -650,9 +706,16 @@ $('copyButton').addEventListener('click',()=>{
        else window.prompt('复制牌桌链接：',u); }catch(_){ window.prompt('复制牌桌链接：',u); }
 });
 $('reconnectButton').addEventListener('click',hardReconnect);
+/* 页面从 bfcache 恢复（返回/前进）时不会重新执行脚本，而 pagehide 已经把
+   peer 销毁了 —— 不主动重建，界面会永远停在离开前的旧状态，对面也连不进来。 */
+window.addEventListener('pageshow',e=>{
+  if(!e||!e.persisted||mySeat<0) return;
+  hardReconnect();
+});
 /* 手机切到后台会挂起连接，回到前台时如果已经断了就主动重连一次 */
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden||mySeat<0) return;
+  if(joined&&(!peer||peer.destroyed||!peer.open)){ hardReconnect(); return; }
   if(role==='guest'&&(!joined||Date.now()-lastHostAt>4000)){ joinAttempt=0; scheduleRejoin(0); }
 });
 startHeartbeat();

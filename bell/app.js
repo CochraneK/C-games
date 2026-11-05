@@ -536,7 +536,7 @@ window.addEventListener('keydown',e=>{
  if(e.code==='Space'){e.preventDefault();if(!e.repeat)doBell();}
  if(e.code==='Enter'){e.preventDefault();if(!e.repeat)doFlip();}
 });
-window.addEventListener('pagehide',()=>{if(mic)mic.getTracks().forEach(t=>t.stop());if(call)call.close();});
+window.addEventListener('pagehide',()=>{try{if(mic&&mic.getTracks)mic.getTracks().forEach(t=>t.stop());}catch(_){}try{if(call)call.close();}catch(_){}});
 // Designed for no remote-network test injection; never sends raw data via GitHub Pages.
 window.__bellDebug={getState:()=>view, getMode:()=>mode, getRoom:()=>({phase:roomPhase,ready:seatReady.slice(),connected:Boolean(conn?.open)}),isFive:()=>Boolean(game&&C.isFive(game))};
 const params=new URLSearchParams(location.search);

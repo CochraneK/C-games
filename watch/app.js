@@ -352,6 +352,9 @@ $('leaveBtn').addEventListener('click',()=>{
   $('room').classList.add('hidden'); $('welcome').classList.remove('hidden');
 });
 window.addEventListener('pagehide',()=>{ if(mic&&mic.getTracks) mic.getTracks().forEach(t=>t.stop()); clearCalls(); try{ if(peer&&!peer.destroyed) peer.destroy(); }catch(_){} });
+/* bfcache 恢复时脚本不会重跑、peer 却已在 pagehide 里销毁 → 会变成一个
+   「界面显示在房间里、实际收不到任何消息」的僵尸房间。刷新回可重新加入的状态。 */
+window.addEventListener('pageshow',e=>{ if(e&&e.persisted) location.reload(); });
 
 function sendChat(){
   const v=$('chatInput').value.trim(); if(!v) return;

@@ -411,6 +411,8 @@ $('rulesButton').addEventListener('click',showRules);
 $('closeRules').addEventListener('click',()=>$('rulesDialog').close());
 $('gotIt').addEventListener('click',()=>$('rulesDialog').close());
 window.addEventListener('pagehide',()=>{if(mic)mic.getTracks().forEach(t=>t.stop());clearCalls();try{peer?.destroy();}catch(_){}});
+/* bfcache 恢复时脚本不会重跑、peer 却已销毁 → 刷新回可重新加入的状态，别留僵尸房间 */
+window.addEventListener('pageshow',e=>{if(e&&e.persisted)location.reload();});
 const params=new URLSearchParams(location.search);
 const incoming=(params.get('room')||'').toUpperCase();
 if(CODE_RE.test(incoming)){$('joinCode').value=incoming;$('joinCode').parentElement?.classList.add('from-link');}
