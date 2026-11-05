@@ -18,7 +18,7 @@ const CODE_RE=/^[A-Z2-9]{8,12}$/;
    所以要在正则校验前拦下来，转去 bell/duel/。 */
 const DUEL_CODE='SU77315';
 /* 注意：本页在 /bell/multi/，双人房间在 /bell/duel/ —— 必须用 ../duel/，用 ./duel/ 会 404 */
-const gotoDuel=()=>{ window.location.href='../duel/?room='+DUEL_CODE; };
+const gotoDuel=()=>{ window.location.href='../duel/relay.html?room='+DUEL_CODE; };
 const FAIR_WINDOW=180;
 let role='welcome',phase='lobby',kind='classic',capacity=4,code='',myName='';
 let peer=null,hostConnection=null,connections=new Map(),members=[],game=null,view=null;

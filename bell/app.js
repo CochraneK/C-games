@@ -18,7 +18,7 @@ const ALLOWED=/^[A-Z2-9]{8,12}$/;
    它比 ALLOWED 短，所以必须在正则校验之前单独拦下来。 */
 const DUEL_CODE='SU77315';
 const isDuelCode=c=>c===DUEL_CODE;
-function gotoDuel(){ window.location.href='./duel/?room='+DUEL_CODE; }
+function gotoDuel(){ window.location.href='./duel/relay.html?room='+DUEL_CODE; }
 const dom={
   welcome:$('welcome'),gameArea:$('gameArea'),host:$('hostButton'),practice:$('practiceButton'),join:$('joinButton'),roomInput:$('roomInput'),
   status:$('statusText'),dot:$('statusDot'),roomLabel:$('roomLabel'),copy:$('copyButton'),message:$('gameMessage'),bell:$('bellButton'),flip:$('flipButton'),

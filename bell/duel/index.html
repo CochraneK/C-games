@@ -30,6 +30,7 @@
  @media(max-width:360px){.play-card{width:72px}}
  /* 用在 <a> 上的按钮要补掉浏览器默认的链接样式 */
  a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-family:inherit}
+ a.text-btn{text-decoration:none}
 </style>
 <script defer src="../multi/core.js"></script>
 <script defer src="./app.js"></script>
@@ -60,7 +61,7 @@
  </section>
 
  <section id="roomView" class="hidden">
-  <div class="room-bar"><div><span class="status-light" id="networkDot"></span><span id="networkText" role="status">正在连接…</span></div><div class="code-line"><span>房间码 <strong>SU77315</strong></span><button id="copyButton" class="text-btn" type="button">复制邀请链接</button><button id="reconnectButton" class="text-btn" type="button">重新连接</button></div></div>
+  <div class="room-bar"><div><span class="status-light" id="networkDot"></span><span id="networkText" role="status">正在连接…</span></div><div class="code-line"><span>房间码 <strong>SU77315</strong></span><a class="text-btn" href="./relay.html?room=SU77315">连不上？用稳定通道 ↗</a><button id="copyButton" class="text-btn" type="button">复制邀请链接</button><button id="reconnectButton" class="text-btn" type="button">重新连接</button></div></div>
   <div class="tabs" role="group" aria-label="游戏玩法">
     <button type="button" id="classicTab" class="tab selected" aria-pressed="true">🍓 德国心脏病</button>
     <button type="button" id="panTab" class="tab" aria-pressed="false">♠ 潘神心脏病</button>

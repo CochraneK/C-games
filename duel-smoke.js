@@ -337,7 +337,7 @@ function boot(search, clock) {
     const d = ctx.sandbox.document;
     d.getElementById('roomInput').value = 'su77315';       // 故意小写
     d.getElementById('joinButton').fire('click');
-    ok('跳转 ./duel/?room=SU77315', /duel\/\?room=SU77315$/.test(String(nav)), String(nav));
+    ok('跳转 ./duel/relay.html?room=SU77315', /duel\/relay\.html\?room=SU77315$/.test(String(nav)), String(nav));
 
     // 普通房间码不能受影响（后面 render 需要真实 DOM，这里只关心「没有发生跳转」）
     nav = '';
